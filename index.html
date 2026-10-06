@@ -143,12 +143,12 @@ ul.items li.editing input[type=number]{width:64px;flex:0 0 auto;font-family:var(
 .waterline .v{font-size:26px;font-weight:800;color:var(--water)}
 
 /* body metrics */
-.body-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end}
+.body-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;align-items:end}
+.body-form .btn{grid-column:1/-1}
 .body-form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
 .unit-in{position:relative;display:block}
 .unit-in input{width:100%;padding-right:46px}
 .unit-in em{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-style:normal;font-size:11px;color:var(--muted);pointer-events:none}
-@media (max-width:480px){.body-form{grid-template-columns:1fr 1fr}.body-form .btn{grid-column:1/-1}}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
 .stat{background:var(--bg);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .stat .l{font-size:12px;color:var(--muted)}
@@ -311,7 +311,9 @@ details[open] summary::after{content:"－"}
     <h2 id="wH"><span class="dot" style="background:var(--accent)"></span>身體數據<span class="small muted" style="font-weight:400">早上空腹量</span></h2>
     <form class="body-form" id="wForm">
       <label>體重<span class="unit-in"><input type="number" id="wInput" step="0.1" min="20" max="300" placeholder="65.9" inputmode="decimal"><em>kg</em></span></label>
+      <label>骨骼肌肉重<span class="unit-in"><input type="number" id="muscleInput" step="0.1" min="10" max="120" placeholder="24.2" inputmode="decimal"><em>kg</em></span></label>
       <label>體脂率<span class="unit-in"><input type="number" id="fatInput" step="0.1" min="3" max="70" placeholder="38" inputmode="decimal"><em>%</em></span></label>
+      <label>腰圍<span class="unit-in"><input type="number" id="waistInput" step="0.1" min="40" max="200" placeholder="83.9" inputmode="decimal"><em>cm</em></span></label>
       <label>空腹血糖<span class="unit-in"><input type="number" id="gluInput" step="1" min="30" max="600" placeholder="100" inputmode="numeric"><em>mg/dL</em></span></label>
       <button class="btn" type="submit">記錄</button>
     </form>
@@ -347,7 +349,8 @@ details[open] summary::after{content:"－"}
       <label>身高 (cm)<input type="number" id="pHeight" min="100" max="230" step="0.1" placeholder="160" inputmode="decimal"></label>
       <label>體重 (kg)<input type="number" id="pWeight" min="30" max="250" step="0.1" placeholder="55" inputmode="decimal"></label>
       <label>比賽期初體脂率 (%)<input type="number" id="pFat" min="3" max="70" step="0.1" placeholder="38" inputmode="decimal"></label>
-      <p class="hint full" style="margin:0">這個設定一次就好，之後身體數據變化請到下面「身體數據」區塊記錄，不要回來改這裡，不然比賽的相對降幅會算錯。</p>
+      <label>期初骨骼肌肉重 (kg)<input type="number" id="pMuscle" min="10" max="120" step="0.1" placeholder="24.2" inputmode="decimal"></label>
+      <p class="hint full" style="margin:0">這兩個設定一次就好，之後身體數據變化請到下面「身體數據」區塊記錄，不要回來改這裡，不然比賽的相對降幅／肌肉增加率會算錯。</p>
       <label class="full">平常活動量
         <select id="pAct">
           <option value="1.2">久坐（辦公室、幾乎不運動）</option>
@@ -434,11 +437,13 @@ let cur = today;
 let profile = null;
 let days = {};           // date -> day doc
 let meal = (() => { const h = new Date().getHours(); return h < 10 ? 'b' : h < 14 ? 'l' : h < 17 ? 's' : 'd'; })();
-const emptyDay = d => ({ kind:'day', date:d, foods:[], ex:[], water:0, weight:null, fat:null, glucose:null });
+const emptyDay = d => ({ kind:'day', date:d, foods:[], ex:[], water:0, weight:null, fat:null, glucose:null, muscle:null, waist:null });
 let metric = 'weight';
 const METRICS = {
   weight: { label:'體重', unit:'kg', dec:1, color:'var(--accent)', goal: () => profile && profile.goalWeight ? +profile.goalWeight : null, goalLabel:'目標' },
   fat:    { label:'體脂率', unit:'%', dec:1, color:'var(--kcal)', goal: () => profile && profile.goalFat ? +profile.goalFat : null, goalLabel:'目標' },
+  muscle: { label:'骨骼肌肉重', unit:'kg', dec:1, color:'var(--move)', goal: () => null, goalLabel:'目標' },
+  waist:  { label:'腰圍', unit:'cm', dec:1, color:'var(--water)', goal: () => null, goalLabel:'目標' },
   glucose:{ label:'空腹血糖', unit:'mg/dL', dec:0, color:'var(--water)', goal: () => 100, goalLabel:'正常上限 100' }
 };
 const gluLevel = g => g < 100 ? ['ok','正常'] : g < 126 ? ['mid','偏高'] : ['hi','高，建議就醫確認'];
@@ -487,6 +492,8 @@ const targets = () => { const c = calc(profile); return { kcal: c ? c.target : 1
 const bodyWeight = () => { const ws = Object.values(days).filter(d => d.weight).sort((a,b)=>a.date<b.date?1:-1); return (ws[0] && ws[0].weight) || (profile && profile.weight) || 60; };
 const bodyFatNow = () => { const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?1:-1); return (fs[0] && fs[0].fat) || (profile && profile.fat) || null; };
 const bodyFatBaseline = () => { if (profile && profile.fat) return profile.fat; const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?-1:1); return (fs[0] && fs[0].fat) || null; };
+const bodyMuscleNow = () => { const ms = Object.values(days).filter(d => d.muscle).sort((a,b)=>a.date<b.date?1:-1); return (ms[0] && ms[0].muscle) || (profile && profile.muscle) || null; };
+const bodyMuscleBaseline = () => { if (profile && profile.muscle) return profile.muscle; const ms = Object.values(days).filter(d => d.muscle).sort((a,b)=>a.date<b.date?-1:1); return (ms[0] && ms[0].muscle) || null; };
 
 // ---------- render ----------
 function renderAll(){ renderHeader(); renderBalance(); renderRace(); renderFoods(); renderWater(); renderEx(); renderWeight(); renderWeek(); renderSetup(); }
@@ -676,7 +683,7 @@ function stat(label, val, unit, level){
 }
 function renderWeight(){
   const d = getDay(cur);
-  [['#wInput','weight'],['#fatInput','fat'],['#gluInput','glucose']].forEach(([sel,k]) => { const inp = $(sel); if (document.activeElement !== inp) inp.value = d[k] ?? ''; });
+  [['#wInput','weight'],['#fatInput','fat'],['#gluInput','glucose'],['#muscleInput','muscle'],['#waistInput','waist']].forEach(([sel,k]) => { const inp = $(sel); if (document.activeElement !== inp) inp.value = d[k] ?? ''; });
   // derived numbers for the selected day
   const st = $('#bodyStats'); st.textContent = '';
   const h = profile && profile.height ? profile.height/100 : null;
@@ -686,6 +693,12 @@ function renderWeight(){
     st.appendChild(stat('體脂肪重', fm.toFixed(1), 'kg', fatLevel(d.fat)));
     st.appendChild(stat('去脂體重', (d.weight-fm).toFixed(1), 'kg'));
   }
+  if (d.muscle) {
+    const baseM = bodyMuscleBaseline();
+    if (baseM && baseM > 0) { const rel = (d.muscle - baseM) / baseM * 100; st.appendChild(stat('肌肉增加率', (rel >= 0 ? '+' : '') + rel.toFixed(1), '%', rel >= 0 ? ['ok','平手時的加分項'] : ['mid','低於期初'])); }
+    else st.appendChild(stat('骨骼肌肉重', d.muscle, 'kg'));
+  }
+  if (d.waist) st.appendChild(stat('腰圍', d.waist, 'cm'));
   if (d.glucose) st.appendChild(stat('空腹血糖', d.glucose, 'mg/dL', gluLevel(d.glucose)));
   if (!st.childElementCount) st.innerHTML = '<div class="empty" style="grid-column:1/-1">記下今天的體重、體脂和血糖，這裡會算出 BMI、體脂肪重和去脂體重。</div>';
 
@@ -752,6 +765,7 @@ function fillProfileForm(){
   const p = profile || {};
   $('#pSex').value = p.sex || 'f'; $('#pAge').value = p.age ?? ''; $('#pHeight').value = p.height ?? ''; $('#pWeight').value = p.weight ?? '';
   $('#pFat').value = p.fat ?? '';
+  $('#pMuscle').value = p.muscle ?? '';
   $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
   $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pRankGoal').value = p.rankGoal ?? '';
@@ -760,7 +774,7 @@ function fillProfileForm(){
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -1001,17 +1015,24 @@ function buildCoachPrompt(){
     const relPct = (baseF - curF) / baseF * 100;
     scoreLine = `這場比賽的計分方式是「體脂率相對降幅」＝（期初體脂率－目前體脂率）÷期初體脂率，不是比減了幾公斤。使用者期初體脂率 ${baseF}%，目前相對降幅約 ${relPct.toFixed(1)}%。（過去比賽的前兩名相對降幅大約在 37%～52% 之間，供參考，不代表使用者的目標一定要這麼高。）`;
   }
+  const curM = bodyMuscleNow(), baseM = bodyMuscleBaseline();
+  let muscleLine = '減脂率如果跟別人打平，比賽會依序比拼：肌肉增加率、體重、BMI、腰圍。所以增肌或至少不掉肌肉，對名次有幫助。';
+  if (baseM && curM != null && baseM > 0) {
+    const relM = (curM - baseM) / baseM * 100;
+    muscleLine = `平手判定依序比拼：肌肉增加率、體重、BMI、腰圍。使用者期初骨骼肌肉重 ${baseM} kg，目前肌肉變化約 ${relM >= 0 ? '+' : ''}${relM.toFixed(1)}%，${relM >= 0 ? '是加分方向，保持或繼續增加。' : '是減少的，要小心別讓減脂過程流失太多肌肉，可以增加蛋白質攝取和阻力訓練。'}`;
+  }
 
   return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽，每天早上空腹（早餐前）量體重，這個習慣很穩定，數據可信。
 使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
 ${scoreLine}
+${muscleLine}
 ${weekLine}
 ${paceLine}
 今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
 今天各餐記錄：
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
-請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練保護肌肉量。這場比賽是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
+請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練保護並盡量增加肌肉量（這對平手判定的肌肉增加率有幫助）。這場比賽主要是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
 {"summary":"一句話總評，結合今天狀況和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
@@ -1055,16 +1076,16 @@ $('#exForm').addEventListener('submit', e => {
 $('#wForm').addEventListener('submit', e => {
   e.preventDefault(); const d = getDay(cur);
   const num = (sel, dec) => { const v = $(sel).value; return v === '' ? null : Math.round(+v * 10**dec) / 10**dec; };
-  d.weight = num('#wInput',1); d.fat = num('#fatInput',1); d.glucose = num('#gluInput',0); persistDay();
+  d.weight = num('#wInput',1); d.fat = num('#fatInput',1); d.glucose = num('#gluInput',0); d.muscle = num('#muscleInput',1); d.waist = num('#waistInput',1); persistDay();
   if (d.weight && cur === today && profile) { profile.weight = d.weight; store.saveProfile(profile); fillProfileForm(); }
   document.activeElement && document.activeElement.blur(); renderAll();
-  const parts = [d.weight && `${d.weight} kg`, d.fat && `體脂 ${d.fat}%`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
+  const parts = [d.weight && `${d.weight} kg`, d.fat && `體脂 ${d.fat}%`, d.muscle && `肌肉 ${d.muscle}kg`, d.waist && `腰圍 ${d.waist}cm`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
   toast(parts.length ? '已記錄 ' + parts.join('、') : '已清除今天的身體數據');
 });
 $('#wClear').onclick = () => {
   const d = getDay(cur);
-  if (!d.weight && !d.fat && !d.glucose) { toast('這天本來就沒有身體數據'); return; }
-  d.weight = null; d.fat = null; d.glucose = null;
+  if (!d.weight && !d.fat && !d.glucose && !d.muscle && !d.waist) { toast('這天本來就沒有身體數據'); return; }
+  d.weight = null; d.fat = null; d.glucose = null; d.muscle = null; d.waist = null;
   persistDay(); document.activeElement && document.activeElement.blur(); renderAll();
   toast('已清除這天的身體數據');
 };
