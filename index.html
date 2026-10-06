@@ -235,7 +235,7 @@ details[open] summary::after{content:"－"}
 
   <!-- Race countdown -->
   <section class="card" id="raceCard" aria-labelledby="raceH" hidden>
-    <h2 id="raceH"><span class="dot" style="background:var(--move)"></span>比賽倒數</h2>
+    <h2 id="raceH"><span class="dot" style="background:var(--move)"></span>比賽倒數<span class="small muted" id="raceRank" style="font-weight:400"></span></h2>
     <div class="stats" id="raceStats"></div>
     <p class="small muted" id="raceNote" style="margin:0"></p>
   </section>
@@ -365,6 +365,7 @@ details[open] summary::after{content:"－"}
       <label>目標體重 (kg)<input type="number" id="pGoalW" min="30" max="250" step="0.1" placeholder="選填" inputmode="decimal"></label>
       <label>目標體脂率 (%)<input type="number" id="pGoalFat" min="5" max="60" step="0.1" placeholder="選填" inputmode="decimal"></label>
       <label class="full">比賽／目標日期<input type="date" id="pDeadline"></label>
+      <label class="full">名次目標（選填）<input type="text" id="pRankGoal" placeholder="例如：前 10 名，共 430 人參賽" maxlength="60" autocomplete="off"></label>
       <label class="full">自訂熱量目標<input type="number" id="pOverride" min="800" max="5000" placeholder="留空＝自動" inputmode="numeric"></label>
       <div class="calc" id="calcBox"></div>
       <button class="btn full" type="submit">儲存設定</button>
@@ -519,6 +520,7 @@ function renderRace(){
   const dl = profile && profile.deadline;
   if (!dl || !(profile.goalWeight || profile.goalFat)) { card.hidden = true; return; }
   card.hidden = false;
+  $('#raceRank').textContent = profile.rankGoal ? '　目標：' + profile.rankGoal : '';
   const daysLeft = Math.ceil((parse(dl) - parse(today)) / 86400000);
   const curW = bodyWeight(), curF = bodyFatNow();
   const box = $('#raceStats'); box.textContent = '';
@@ -741,12 +743,13 @@ function fillProfileForm(){
   $('#pFat').value = p.fat ?? '';
   $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
   $('#pDeadline').value = p.deadline || '2026-11-20';
+  $('#pRankGoal').value = p.rankGoal ?? '';
   $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -956,7 +959,7 @@ function buildCoachPrompt(){
   const dl = profile && profile.deadline;
   const daysLeft = dl ? Math.ceil((parse(dl) - parse(today)) / 86400000) : null;
   const goalLine = profile && (profile.goalWeight || profile.goalFat)
-    ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}`
+    ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}${profile.rankGoal ? '，名次目標：' + profile.rankGoal + '（起點體脂率偏高，想拚一下排名，可以用比較積極但安全的方式）' : ''}`
     : '使用者還沒設定比賽目標，先給一般減脂建議';
 
   // accumulated performance over the last 7 days, not just today
@@ -989,7 +992,7 @@ ${paceLine}
 今天各餐記錄：
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
-請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度，只回覆 JSON，格式：
+請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字，保護肌肉量。只回覆 JSON，格式：
 {"summary":"一句話總評，結合今天狀況和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
