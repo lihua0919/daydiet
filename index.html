@@ -128,8 +128,11 @@ ul.items li{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom
 ul.items li:last-child{border-bottom:0}
 ul.items .name{flex:1;min-width:0;overflow-wrap:anywhere}
 ul.items .k{font-weight:700}
-.del{border:0;background:transparent;color:var(--muted);width:30px;height:30px;border-radius:8px;font-size:18px;line-height:1}
+.del{border:0;background:transparent;color:var(--muted);width:30px;height:30px;border-radius:8px;font-size:18px;line-height:1;flex:0 0 auto}
 .del:hover{background:var(--sunk);color:var(--warn)}
+ul.items li.editing{gap:6px}
+ul.items li.editing input{border:1px solid var(--line);border-radius:8px;background:var(--surface);height:34px;padding:4px 8px;min-width:0;flex:1}
+ul.items li.editing input[type=number]{width:64px;flex:0 0 auto;font-family:var(--f-display)}
 .empty{font-size:14px;color:var(--muted);background:var(--bg);border-radius:10px;padding:12px;text-align:center}
 
 /* water */
@@ -562,20 +565,53 @@ function renderFoods(){
     const hl = document.createElement('span'); hl.textContent = label;
     const hk = document.createElement('span'); hk.className='num'; hk.textContent = fmt(items.reduce((a,f)=>a+ +f.kcal,0)) + ' kcal';
     h.append(hl, hk); wrap.appendChild(h);
-    wrap.appendChild(itemList(items, f => f.name, f => fmt(f.kcal), id => { d.foods = d.foods.filter(f => f.id !== id); persistDay(); renderAll(); }));
+    wrap.appendChild(itemList(items, f => f.name, f => fmt(f.kcal), id => { d.foods = d.foods.filter(f => f.id !== id); persistDay(); renderAll(); }, {
+      fields: [{key:'name', type:'text', label:'食物名稱'}, {key:'kcal', type:'number', label:'大卡'}],
+      onSave: (f, vals) => { f.name = vals.name || f.name; f.kcal = Math.max(0, Math.round(vals.kcal)); persistDay(); renderAll(); }
+    }));
     box.appendChild(wrap);
   });
 }
-function itemList(items, nameFn, valFn, onDel){
+function itemList(items, nameFn, valFn, onDel, editCfg){
   const ul = document.createElement('ul'); ul.className = 'items';
   items.forEach(it => {
     const li = document.createElement('li');
+    renderRow(li, it);
+    ul.appendChild(li);
+  });
+  function renderRow(li, it){
+    li.classList.remove('editing'); li.textContent = '';
     const n = document.createElement('span'); n.className='name'; n.textContent = nameFn(it);
     const k = document.createElement('span'); k.className='k num'; k.textContent = valFn(it);
     const x = document.createElement('button'); x.className='del'; x.type='button'; x.textContent='×'; x.setAttribute('aria-label','刪除 '+nameFn(it));
     x.onclick = () => onDel(it.id);
-    li.append(n,k,x); ul.appendChild(li);
-  });
+    li.append(n, k);
+    if (editCfg) {
+      const edit = document.createElement('button'); edit.className='del'; edit.type='button'; edit.textContent='✎'; edit.setAttribute('aria-label','修改 '+nameFn(it));
+      edit.onclick = () => renderEditRow(li, it);
+      li.appendChild(edit);
+    }
+    li.appendChild(x);
+  }
+  function renderEditRow(li, it){
+    li.classList.add('editing'); li.textContent = '';
+    const inputs = editCfg.fields.map(f => {
+      const inp = document.createElement('input');
+      inp.type = f.type; inp.className = 'edit-' + f.key + (f.type === 'number' ? ' num' : ''); inp.value = it[f.key];
+      inp.setAttribute('aria-label', f.label);
+      return inp;
+    });
+    const save = document.createElement('button'); save.className='del'; save.type='button'; save.textContent='✓'; save.setAttribute('aria-label','儲存修改');
+    const cancel = document.createElement('button'); cancel.className='del'; cancel.type='button'; cancel.textContent='×'; cancel.setAttribute('aria-label','取消修改');
+    save.onclick = () => {
+      const vals = {};
+      editCfg.fields.forEach((f,i) => { vals[f.key] = f.type === 'number' ? (+inputs[i].value || 0) : inputs[i].value.trim(); });
+      editCfg.onSave(it, vals);
+    };
+    cancel.onclick = () => renderRow(li, it);
+    li.append(...inputs, save, cancel);
+    inputs[0].focus();
+  }
   return ul;
 }
 function addFood(name, kcal){
@@ -604,7 +640,16 @@ function renderEx(){
   const d = getDay(cur), box = $('#exList'); box.textContent='';
   $('#exHint').textContent = `消耗大卡＝強度係數（MET）× 體重 ${bodyWeight()} kg × 時間。`;
   if (!d.ex.length) { box.innerHTML = '<div class="empty">今天還沒運動紀錄。選種類、填分鐘數就會自動估算。</div>'; return; }
-  box.appendChild(itemList(d.ex, e => `${e.name} ${e.min} 分鐘`, e => fmt(e.kcal), id => { d.ex = d.ex.filter(e => e.id !== id); persistDay(); renderAll(); }));
+  box.appendChild(itemList(d.ex, e => `${e.name} ${e.min} 分鐘`, e => fmt(e.kcal), id => { d.ex = d.ex.filter(e => e.id !== id); persistDay(); renderAll(); }, {
+    fields: [{key:'name', type:'text', label:'運動種類'}, {key:'min', type:'number', label:'分鐘'}],
+    onSave: (ex, vals) => {
+      const name = vals.name || ex.name, min = Math.max(1, Math.round(vals.min));
+      const match = EXS.find(([n]) => n === name);
+      ex.kcal = Math.round(match ? match[1] * bodyWeight() * min / 60 : (ex.kcal / Math.max(1, ex.min)) * min);
+      ex.name = name; ex.min = min;
+      persistDay(); renderAll();
+    }
+  }));
 }
 
 function stat(label, val, unit, level){
