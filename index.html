@@ -198,6 +198,15 @@ details[open] summary::after{content:"－"}
     </div>
   </header>
 
+  <!-- AI coach -->
+  <section class="card" aria-labelledby="coachH">
+    <h2 id="coachH"><span class="dot" style="background:var(--kcal)"></span>AI 教練建議</h2>
+    <p class="hint" id="coachHint" style="margin:0">根據你這幾天累積的飲食、運動和體重記錄（早上空腹量的），給你今天的建議。</p>
+    <button class="btn" type="button" id="coachGo">取得今日建議</button>
+    <div class="small muted" id="coachStatus" role="status" aria-live="polite"></div>
+    <div id="coachResult"></div>
+  </section>
+
   <section class="card setup" id="setupCard" hidden>
     <h2>先設定個人資料</h2>
     <p class="small" style="margin:0">填入身高、體重、年齡和活動量，就能算出你每天該吃多少大卡、喝多少水。現在先用預設值 1,800 kcal、2,000 ml。</p>
@@ -324,15 +333,6 @@ details[open] summary::after{content:"－"}
     </div>
     <div class="chart" id="weekChart"></div>
     <div class="small muted" id="weekSum"></div>
-  </section>
-
-  <!-- AI coach -->
-  <section class="card" aria-labelledby="coachH">
-    <h2 id="coachH"><span class="dot" style="background:var(--kcal)"></span>AI 教練建議</h2>
-    <p class="hint" id="coachHint" style="margin:0">根據你今天目前的飲食、運動記錄和比賽倒數天數，給你接下來的飲食和運動建議。</p>
-    <button class="btn" type="button" id="coachGo">取得今日建議</button>
-    <div class="small muted" id="coachStatus" role="status" aria-live="polite"></div>
-    <div id="coachResult"></div>
   </section>
 
   <!-- Settings -->
@@ -946,7 +946,7 @@ function renderEstimate(items, note){
 
 // ---------- AI coach ----------
 function buildCoachPrompt(){
-  const t = targets(), d = getDay(cur), { inK, exK } = sums(d);
+  const t = targets(), d = getDay(today), { inK, exK } = sums(d);
   const left = t.kcal - inK + exK;
   const loggedMeals = MEALS.map(([k,label]) => {
     const items = d.foods.filter(f => f.meal === k);
@@ -958,14 +958,39 @@ function buildCoachPrompt(){
   const goalLine = profile && (profile.goalWeight || profile.goalFat)
     ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}`
     : '使用者還沒設定比賽目標，先給一般減脂建議';
-  return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽。
+
+  // accumulated performance over the last 7 days, not just today
+  const recent = [];
+  for (let i = 6; i >= 0; i--) { const ds = addDays(today, -i); const dd = days[ds] || emptyDay(ds); const s = sums(dd); recent.push({ ds, ...s, water: dd.water || 0, logged: dd.foods.length > 0 }); }
+  const loggedDays = recent.filter(r => r.logged);
+  const weekLine = loggedDays.length
+    ? `最近 7 天有記錄 ${loggedDays.length} 天，平均淨攝取（飲食－運動）約 ${fmt(loggedDays.reduce((a,r)=>a+r.inK-r.exK,0)/loggedDays.length)} kcal，其中熱量控制在目標內有 ${loggedDays.filter(r=>r.inK-r.exK<=t.kcal).length} 天。`
+    : '最近 7 天還沒什麼飲食記錄，先用今天的狀況給建議就好。';
+
+  const ws = Object.values(days).filter(w => w.weight && w.date <= today).sort((a,b)=>a.date<b.date?-1:1);
+  let paceLine = '體重記錄還不夠多天，看不出減重趨勢，先鼓勵使用者每天早上空腹量體重。';
+  if (ws.length >= 2) {
+    const span = (parse(ws[ws.length-1].date) - parse(ws[0].date)) / 86400000;
+    if (span >= 3) {
+      const actual = (ws[0].weight - ws[ws.length-1].weight) / span * 7;
+      paceLine = `體重資料從 ${ws[0].date} 到 ${ws[ws.length-1].date}（都是早上空腹量的，數據穩定），實際減重速度約每週 ${actual.toFixed(2)} kg。`;
+      if (profile && profile.goalWeight && daysLeft > 0) {
+        const needed = (curW - profile.goalWeight) / (daysLeft / 7);
+        paceLine += needed > 0 ? ` 距離目標需要每週減 ${needed.toFixed(2)} kg，${actual >= needed * 0.85 ? '目前進度跟得上。' : '目前進度偏慢，建議這幾天調整得積極一點。'}` : ' 體重已經達標。';
+      }
+    }
+  }
+
+  return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽，每天早上空腹（早餐前）量體重，這個習慣很穩定，數據可信。
 使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
+${weekLine}
+${paceLine}
 今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
 今天各餐記錄：
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
-請用繁體中文給建議，語氣務實、簡短，只回覆 JSON，格式：
-{"summary":"一句話總評今天目前的狀況","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度調整強度","note":"一句鼓勵或提醒"}`;
+請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度，只回覆 JSON，格式：
+{"summary":"一句話總評，結合今天狀況和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
   const btn = $('#coachGo'); btn.disabled = true; $('#coachResult').textContent = '';
