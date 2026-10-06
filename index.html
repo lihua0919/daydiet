@@ -700,7 +700,7 @@ async function askAI(prompt, imageFile, signal){
   parts.push({ text: prompt });
   const body = JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ responseMimeType:'application/json', temperature:0.2 } });
   let models = AI.model() ? [AI.model()] : [];
-  if (!models.length) models = (await pickModels(key, signal)).slice(0, 4);
+  if (!models.length) models = (await pickModels(key, signal)).slice(0, 5);
   if (!models.length) throw new ApiError('bad_model', '');
   let lastErr;
   for (let i = 0; i < models.length; i++) {
@@ -715,8 +715,13 @@ async function askAI(prompt, imageFile, signal){
       try { return JSON.parse(m[0]); } catch { throw new ApiError('invalid_json', text); }
     } catch (e) {
       lastErr = e;
-      if ((e.code === 'bad_model' || e.code === 'rate_limited') ) {
-        if (AI.model() && i === models.length - 1 && models.length === 1) { LS.set('fl.geminiModel', ''); models = models.concat((await pickModels(key, signal)).filter(n => n !== models[0]).slice(0, 3)); }
+      if (['bad_model','rate_limited','server','other'].includes(e.code)) {
+        console.warn('Gemini model failed', models[i], e.code, e.message);
+        if (e.message) e.message = models[i] + '：' + e.message;
+        if (i === models.length - 1 && models.length === 1 && AI.model()) {
+          LS.set('fl.geminiModel', '');
+          models = models.concat((await pickModels(key, signal)).filter(n => n !== models[0]).slice(0, 4));
+        }
         continue;
       }
       throw e;
@@ -757,7 +762,8 @@ const PHOTO_ERR = {
   rate_limited: '免費額度暫時用完（每分鐘或每天有次數上限），請稍後再試。',
   bad_model: '找不到可用的 Gemini 模型，請稍後再試，或重新產生金鑰。',
   network: '連不上 Gemini，請確認網路後再試。',
-  server: 'Gemini 服務暫時忙碌，請稍後再按一次「估算熱量」。',
+  server: 'Gemini 服務暫時忙碌，請稍後再試一次。',
+  other: 'Gemini 回傳錯誤。',
   refused: '這張照片無法估算，請換一張清楚拍到食物的照片。',
   invalid_json: '估算結果格式有誤，請按「估算熱量」再試一次。'
 };
@@ -793,7 +799,7 @@ ${note ? '使用者補充說明：「' + note.slice(0, 200) + '」，請依此�
     if (e && e.code === 'cancelled') return;
     const code = e && e.code;
     if (code === 'no_key' || code === 'bad_key') $('#photoWarn').hidden = false;
-    photoMsg(PHOTO_ERR[code] || '估算暫時失敗，請稍後再按一次「估算熱量」。');
+    photoMsg((PHOTO_ERR[code] || '估算暫時失敗，請稍後再按一次「估算熱量」。') + (e && e.message && code !== 'no_key' ? '（詳細：' + String(e.message).slice(0, 160) + '）' : ''));
   } finally { btn.disabled = false; photoCtl = null; }
 };
 function renderEstimate(items, note){
@@ -883,7 +889,7 @@ $('#aiForm').addEventListener('submit', async e => {
     if (!list.length) throw new ApiError('bad_model', '');
     await askAI('只回覆 JSON：{"ok":true}', null);
     $('#apiStatus').textContent = `連線成功（使用 ${AI.model()}），可以開始拍照估算了。`; toast('Gemini 設定完成');
-  } catch (err) { $('#apiStatus').textContent = PHOTO_ERR[err.code] || ('測試失敗：' + err.message); }
+  } catch (err) { $('#apiStatus').textContent = (PHOTO_ERR[err.code] || '測試失敗。') + (err.message ? '（詳細：' + String(err.message).slice(0, 200) + '）' : ''); }
 });
 $('#apiClear').onclick = () => { LS.set('fl.geminiKey', ''); LS.set('fl.geminiModel', ''); $('#apiKey').value = ''; initPhoto(); $('#apiStatus').textContent = '已清除金鑰。'; };
 $('#gotoAi').onclick = () => { const d = $('#aiSettings'); d.open = true; d.scrollIntoView({ behavior:'smooth' }); setTimeout(() => $('#apiKey').focus(), 300); };
