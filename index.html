@@ -221,6 +221,13 @@ details[open] summary::after{content:"－"}
     </div>
   </section>
 
+  <!-- Race countdown -->
+  <section class="card" id="raceCard" aria-labelledby="raceH" hidden>
+    <h2 id="raceH"><span class="dot" style="background:var(--move)"></span>比賽倒數</h2>
+    <div class="stats" id="raceStats"></div>
+    <p class="small muted" id="raceNote" style="margin:0"></p>
+  </section>
+
   <!-- Food -->
   <section class="card" aria-labelledby="foodH">
     <h2 id="foodH"><span class="dot" style="background:var(--kcal)"></span>飲食紀錄</h2>
@@ -313,6 +320,15 @@ details[open] summary::after{content:"－"}
     <div class="small muted" id="weekSum"></div>
   </section>
 
+  <!-- AI coach -->
+  <section class="card" aria-labelledby="coachH">
+    <h2 id="coachH"><span class="dot" style="background:var(--kcal)"></span>AI 教練建議</h2>
+    <p class="hint" id="coachHint" style="margin:0">根據你今天目前的飲食、運動記錄和比賽倒數天數，給你接下來的飲食和運動建議。</p>
+    <button class="btn" type="button" id="coachGo">取得今日建議</button>
+    <div class="small muted" id="coachStatus" role="status" aria-live="polite"></div>
+    <div id="coachResult"></div>
+  </section>
+
   <!-- Settings -->
   <details class="card" id="settings">
     <summary>個人設定與每日目標</summary>
@@ -323,6 +339,7 @@ details[open] summary::after{content:"－"}
       <label>年齡<input type="number" id="pAge" min="12" max="100" placeholder="歲" inputmode="numeric"></label>
       <label>身高 (cm)<input type="number" id="pHeight" min="100" max="230" step="0.1" placeholder="160" inputmode="decimal"></label>
       <label>體重 (kg)<input type="number" id="pWeight" min="30" max="250" step="0.1" placeholder="55" inputmode="decimal"></label>
+      <label>目前體脂率 (%)<input type="number" id="pFat" min="3" max="70" step="0.1" placeholder="38" inputmode="decimal"></label>
       <label class="full">平常活動量
         <select id="pAct">
           <option value="1.2">久坐（辦公室、幾乎不運動）</option>
@@ -341,6 +358,7 @@ details[open] summary::after{content:"－"}
       </label>
       <label>目標體重 (kg)<input type="number" id="pGoalW" min="30" max="250" step="0.1" placeholder="選填" inputmode="decimal"></label>
       <label>目標體脂率 (%)<input type="number" id="pGoalFat" min="5" max="60" step="0.1" placeholder="選填" inputmode="decimal"></label>
+      <label class="full">比賽／目標日期<input type="date" id="pDeadline"></label>
       <label class="full">自訂熱量目標<input type="number" id="pOverride" min="800" max="5000" placeholder="留空＝自動" inputmode="numeric"></label>
       <div class="calc" id="calcBox"></div>
       <button class="btn full" type="submit">儲存設定</button>
@@ -458,9 +476,10 @@ function calc(p){
 }
 const targets = () => { const c = calc(profile); return { kcal: c ? c.target : 1800, water: c ? c.water : 2000, set: !!c }; };
 const bodyWeight = () => { const ws = Object.values(days).filter(d => d.weight).sort((a,b)=>a.date<b.date?1:-1); return (ws[0] && ws[0].weight) || (profile && profile.weight) || 60; };
+const bodyFatNow = () => { const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?1:-1); return (fs[0] && fs[0].fat) || (profile && profile.fat) || null; };
 
 // ---------- render ----------
-function renderAll(){ renderHeader(); renderBalance(); renderFoods(); renderWater(); renderEx(); renderWeight(); renderWeek(); renderSetup(); }
+function renderAll(){ renderHeader(); renderBalance(); renderRace(); renderFoods(); renderWater(); renderEx(); renderWeight(); renderWeek(); renderSetup(); }
 
 function renderHeader(){
   const d = parse(cur);
@@ -487,6 +506,39 @@ function renderBalance(){
   $('#targetNote').textContent = !c ? '目前用預設目標，設定個人資料後會自動計算。'
     : profile.override ? '使用你自訂的熱量目標。'
     : c.floored ? `已調到最低建議攝取 ${fmt(c.floor)} kcal，吃太少反而容易掉肌肉。` : `依你的身體數據與目標自動計算。`;
+}
+
+function renderRace(){
+  const card = $('#raceCard');
+  const dl = profile && profile.deadline;
+  if (!dl || !(profile.goalWeight || profile.goalFat)) { card.hidden = true; return; }
+  card.hidden = false;
+  const daysLeft = Math.ceil((parse(dl) - parse(today)) / 86400000);
+  const curW = bodyWeight(), curF = bodyFatNow();
+  const box = $('#raceStats'); box.textContent = '';
+  box.appendChild(stat('距離目標日', daysLeft >= 0 ? daysLeft : 0, '天'));
+  let wGap = null;
+  if (profile.goalWeight) { wGap = curW - profile.goalWeight; box.appendChild(stat('體重還要少', Math.max(0, wGap).toFixed(1), 'kg')); }
+  if (profile.goalFat && curF != null) { const fGap = curF - profile.goalFat; box.appendChild(stat('體脂還要降', Math.max(0, fGap).toFixed(1), '%')); }
+
+  let note = '持續記錄體重，這裡會比較你實際的減重速度和比賽需要的速度。';
+  if (daysLeft <= 0) {
+    note = '已經到了目標日期，看看離目標還差多少，調整之後的計畫。';
+  } else if (wGap !== null && wGap <= 0) {
+    note = '體重已經達到目標，保持住，可以把重點放在體脂率上。';
+  } else if (wGap !== null) {
+    const ws = Object.values(days).filter(d => d.weight && d.date <= today).sort((a,b)=>a.date<b.date?-1:1);
+    const needed = wGap / (daysLeft / 7);
+    if (ws.length >= 2) {
+      const span = (parse(ws[ws.length-1].date) - parse(ws[0].date)) / 86400000;
+      if (span >= 3) {
+        const actual = (ws[0].weight - ws[ws.length-1].weight) / span * 7;
+        const onTrack = actual >= needed * 0.85;
+        note = `需要每週減 ${needed.toFixed(2)} kg，你最近的實際速度約每週 ${actual.toFixed(2)} kg——${onTrack ? '照這個節奏下去可以達標。' : '目前進度有點落後，可以考慮加大熱量赤字或增加運動量。'}`;
+      } else note = `需要每週減 ${needed.toFixed(2)} kg，再記錄幾天體重才能看出實際速度。`;
+    } else note = `需要每週減 ${needed.toFixed(2)} kg 才能在期限內達標，開始記錄體重後這裡會顯示你的實際進度。`;
+  }
+  $('#raceNote').textContent = note;
 }
 
 function renderFoods(){
@@ -638,12 +690,15 @@ function renderSetup(){ $('#setupCard').hidden = !!calc(profile); }
 function fillProfileForm(){
   const p = profile || {};
   $('#pSex').value = p.sex || 'f'; $('#pAge').value = p.age ?? ''; $('#pHeight').value = p.height ?? ''; $('#pWeight').value = p.weight ?? '';
-  $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? ''; $('#pOverride').value = p.override ?? '';
+  $('#pFat').value = p.fat ?? '';
+  $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
+  $('#pDeadline').value = p.deadline || '2026-11-22';
+  $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-22', override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -838,6 +893,57 @@ function renderEstimate(items, note){
   if (note) { const p = document.createElement('p'); p.className = 'est-note'; p.textContent = note; wrap.appendChild(p); }
   const warn = document.createElement('p'); warn.className = 'est-note'; warn.textContent = '估算會有誤差，份量或做法不同時請自己調整數字。';
   wrap.appendChild(warn);
+  box.appendChild(wrap);
+}
+
+// ---------- AI coach ----------
+function buildCoachPrompt(){
+  const t = targets(), d = getDay(cur), { inK, exK } = sums(d);
+  const left = t.kcal - inK + exK;
+  const loggedMeals = MEALS.map(([k,label]) => {
+    const items = d.foods.filter(f => f.meal === k);
+    return items.length ? `${label}：${items.map(f=>`${f.name}(${f.kcal}kcal)`).join('、')}` : `${label}：還沒記錄`;
+  }).join('\n');
+  const curW = bodyWeight(), curF = bodyFatNow();
+  const dl = profile && profile.deadline;
+  const daysLeft = dl ? Math.ceil((parse(dl) - parse(today)) / 86400000) : null;
+  const goalLine = profile && (profile.goalWeight || profile.goalFat)
+    ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}`
+    : '使用者還沒設定比賽目標，先給一般減脂建議';
+  return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽。
+使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
+今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
+今天各餐記錄：
+${loggedMeals}
+喝水 ${d.water || 0} / ${t.water} ml。
+請用繁體中文給建議，語氣務實、簡短，只回覆 JSON，格式：
+{"summary":"一句話總評今天目前的狀況","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度調整強度","note":"一句鼓勵或提醒"}`;
+}
+$('#coachGo').onclick = async () => {
+  const btn = $('#coachGo'); btn.disabled = true; $('#coachResult').textContent = '';
+  $('#coachStatus').textContent = '教練正在看你今天的記錄，大約需要 5–20 秒…';
+  const ctl = new AbortController();
+  try {
+    const res = await askAI(buildCoachPrompt(), null, ctl.signal);
+    $('#coachStatus').textContent = '';
+    renderCoach(res);
+  } catch (e) {
+    const code = e && e.code;
+    $('#coachStatus').textContent = PHOTO_ERR[code] || ('建議暫時失敗：' + (e && e.message ? e.message : '請稍後再試一次。'));
+    if (code === 'no_key' || code === 'bad_key') $('#photoWarn').hidden = false;
+  } finally { btn.disabled = false; }
+};
+function renderCoach(res){
+  const box = $('#coachResult'); box.textContent = '';
+  if (!res) return;
+  const wrap = document.createElement('div'); wrap.className = 'est';
+  [['今日總評', res.summary], ['飲食建議', res.meals], ['運動建議', res.exercise], ['提醒', res.note]].forEach(([label, val]) => {
+    if (!val) return;
+    const p = document.createElement('p'); p.className = 'small'; p.style.margin = '0';
+    const b = document.createElement('b'); b.textContent = label + '：';
+    p.appendChild(b); p.appendChild(document.createTextNode(String(val)));
+    wrap.appendChild(p);
+  });
   box.appendChild(wrap);
 }
 
