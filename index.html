@@ -692,13 +692,13 @@ function fillProfileForm(){
   $('#pSex').value = p.sex || 'f'; $('#pAge').value = p.age ?? ''; $('#pHeight').value = p.height ?? ''; $('#pWeight').value = p.weight ?? '';
   $('#pFat').value = p.fat ?? '';
   $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
-  $('#pDeadline').value = p.deadline || '2026-11-22';
+  $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-22', override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
