@@ -236,6 +236,7 @@ details[open] summary::after{content:"－"}
   <!-- Race countdown -->
   <section class="card" id="raceCard" aria-labelledby="raceH" hidden>
     <h2 id="raceH"><span class="dot" style="background:var(--move)"></span>比賽倒數<span class="small muted" id="raceRank" style="font-weight:400"></span></h2>
+    <p class="hint" style="margin:0">這類比賽通常是比「體脂率相對降幅」＝（期初體脂率－目前體脂率）÷期初體脂率，不是比減了幾公斤。</p>
     <div class="stats" id="raceStats"></div>
     <p class="small muted" id="raceNote" style="margin:0"></p>
   </section>
@@ -345,7 +346,8 @@ details[open] summary::after{content:"－"}
       <label>年齡<input type="number" id="pAge" min="12" max="100" placeholder="歲" inputmode="numeric"></label>
       <label>身高 (cm)<input type="number" id="pHeight" min="100" max="230" step="0.1" placeholder="160" inputmode="decimal"></label>
       <label>體重 (kg)<input type="number" id="pWeight" min="30" max="250" step="0.1" placeholder="55" inputmode="decimal"></label>
-      <label>目前體脂率 (%)<input type="number" id="pFat" min="3" max="70" step="0.1" placeholder="38" inputmode="decimal"></label>
+      <label>比賽期初體脂率 (%)<input type="number" id="pFat" min="3" max="70" step="0.1" placeholder="38" inputmode="decimal"></label>
+      <p class="hint full" style="margin:0">這個設定一次就好，之後身體數據變化請到下面「身體數據」區塊記錄，不要回來改這裡，不然比賽的相對降幅會算錯。</p>
       <label class="full">平常活動量
         <select id="pAct">
           <option value="1.2">久坐（辦公室、幾乎不運動）</option>
@@ -484,6 +486,7 @@ function calc(p){
 const targets = () => { const c = calc(profile); return { kcal: c ? c.target : 1800, water: c ? c.water : 2000, set: !!c }; };
 const bodyWeight = () => { const ws = Object.values(days).filter(d => d.weight).sort((a,b)=>a.date<b.date?1:-1); return (ws[0] && ws[0].weight) || (profile && profile.weight) || 60; };
 const bodyFatNow = () => { const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?1:-1); return (fs[0] && fs[0].fat) || (profile && profile.fat) || null; };
+const bodyFatBaseline = () => { if (profile && profile.fat) return profile.fat; const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?-1:1); return (fs[0] && fs[0].fat) || null; };
 
 // ---------- render ----------
 function renderAll(){ renderHeader(); renderBalance(); renderRace(); renderFoods(); renderWater(); renderEx(); renderWeight(); renderWeek(); renderSetup(); }
@@ -528,6 +531,14 @@ function renderRace(){
   let wGap = null;
   if (profile.goalWeight) { wGap = curW - profile.goalWeight; box.appendChild(stat('體重還要少', Math.max(0, wGap).toFixed(1), 'kg')); }
   if (profile.goalFat && curF != null) { const fGap = curF - profile.goalFat; box.appendChild(stat('體脂還要降', Math.max(0, fGap).toFixed(1), '%')); }
+  const baseF = bodyFatBaseline();
+  if (baseF && curF != null && baseF > 0) {
+    const relPct = (baseF - curF) / baseF * 100;
+    box.appendChild(stat('體脂相對降幅', relPct.toFixed(1), '%', relPct >= 30 ? ['ok','有競爭力'] : relPct >= 15 ? ['mid','累積中'] : ['hi','剛起步']));
+  }
+  if (profile.goalFat && baseF && baseF > 0) {
+    box.appendChild(stat('目標相對降幅', ((baseF - profile.goalFat) / baseF * 100).toFixed(1), '%'));
+  }
 
   let note = '持續記錄體重，這裡會比較你實際的減重速度和比賽需要的速度。';
   if (daysLeft <= 0) {
@@ -984,15 +995,23 @@ function buildCoachPrompt(){
     }
   }
 
+  const baseF = bodyFatBaseline();
+  let scoreLine = '';
+  if (baseF && curF != null && baseF > 0) {
+    const relPct = (baseF - curF) / baseF * 100;
+    scoreLine = `這場比賽的計分方式是「體脂率相對降幅」＝（期初體脂率－目前體脂率）÷期初體脂率，不是比減了幾公斤。使用者期初體脂率 ${baseF}%，目前相對降幅約 ${relPct.toFixed(1)}%。（過去比賽的前兩名相對降幅大約在 37%～52% 之間，供參考，不代表使用者的目標一定要這麼高。）`;
+  }
+
   return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽，每天早上空腹（早餐前）量體重，這個習慣很穩定，數據可信。
 使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
+${scoreLine}
 ${weekLine}
 ${paceLine}
 今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
 今天各餐記錄：
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
-請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字，保護肌肉量。只回覆 JSON，格式：
+請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練保護肌肉量。這場比賽是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
 {"summary":"一句話總評，結合今天狀況和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
