@@ -302,6 +302,9 @@ details[open] summary::after{content:"－"}
       <label>空腹血糖<span class="unit-in"><input type="number" id="gluInput" step="1" min="30" max="600" placeholder="100" inputmode="numeric"><em>mg/dL</em></span></label>
       <button class="btn" type="submit">記錄</button>
     </form>
+    <div class="addrow">
+      <button class="btn ghost" type="button" id="wClear">清除這天的身體數據</button>
+    </div>
     <div class="stats" id="bodyStats"></div>
     <div class="seg" id="metricSeg" role="group" aria-label="趨勢圖項目"></div>
     <div class="chart" id="wChart"></div>
@@ -966,6 +969,13 @@ $('#wForm').addEventListener('submit', e => {
   const parts = [d.weight && `${d.weight} kg`, d.fat && `體脂 ${d.fat}%`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
   toast(parts.length ? '已記錄 ' + parts.join('、') : '已清除今天的身體數據');
 });
+$('#wClear').onclick = () => {
+  const d = getDay(cur);
+  if (!d.weight && !d.fat && !d.glucose) { toast('這天本來就沒有身體數據'); return; }
+  d.weight = null; d.fat = null; d.glucose = null;
+  persistDay(); document.activeElement && document.activeElement.blur(); renderAll();
+  toast('已清除這天的身體數據');
+};
 $('#pForm').addEventListener('input', updateCalc);
 $('#pForm').addEventListener('submit', e => {
   e.preventDefault(); profile = readProfileForm(); store.saveProfile(profile); renderAll(); $('#settings').open = false;
