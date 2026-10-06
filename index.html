@@ -684,14 +684,18 @@ async function gFetch(path, key, opts, signal){
   }
   return body;
 }
-// Pick free, image-capable "flash" models, newest first.
+// Pick free "flash" models: alternate full flash and flash-lite, newest first,
+// so a busy (503) full model falls through to a lite one quickly.
 async function pickModels(key, signal){
   const body = await gFetch('models?pageSize=200', key, null, signal);
   const ver = n => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
-  const ok = (body.models || []).map(m => m.name.replace(/^models\//, '')).filter(n =>
-    /^gemini-[\d.]+-flash/.test(n) && !/(image|tts|live|audio|thinking-exp|embedding|8b)/.test(n));
-  const score = n => ver(n) * 10 - (/lite/.test(n) ? 3 : 0) - (/preview|exp/.test(n) ? 1 : 0) - (/-\d{3,}$/.test(n) ? 0.5 : 0);
-  return ok.sort((a, b) => score(b) - score(a));
+  const names = (body.models || []).map(m => m.name.replace(/^models\//, '')).filter(n =>
+    /^gemini-\d+(\.\d+)?-flash(-lite)?(-preview)?$/.test(n) && ver(n) >= 3);
+  const byVer = arr => arr.sort((a, b) => (ver(b) - ver(a)) || (/preview/.test(a) - /preview/.test(b)));
+  const full = byVer(names.filter(n => !/lite/.test(n))), lite = byVer(names.filter(n => /lite/.test(n)));
+  const out = [];
+  for (let i = 0; i < Math.max(full.length, lite.length); i++) { if (full[i]) out.push(full[i]); if (lite[i]) out.push(lite[i]); }
+  return out;
 }
 async function askAI(prompt, imageFile, signal){
   const key = AI.key(); if (!key) throw new ApiError('no_key', '');
@@ -699,8 +703,9 @@ async function askAI(prompt, imageFile, signal){
   if (imageFile) parts.push({ inline_data:{ mime_type:'image/jpeg', data: await shrinkImage(imageFile) } });
   parts.push({ text: prompt });
   const body = JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ responseMimeType:'application/json', temperature:0.2 } });
-  let models = AI.model() ? [AI.model()] : [];
-  if (!models.length) models = (await pickModels(key, signal)).slice(0, 5);
+  const remembered = AI.model();
+  let models = (await pickModels(key, signal).catch(e => { if (remembered) return []; throw e; })).slice(0, 6);
+  if (remembered) models = [remembered].concat(models.filter(n => n !== remembered)).slice(0, 6);
   if (!models.length) throw new ApiError('bad_model', '');
   let lastErr;
   for (let i = 0; i < models.length; i++) {
@@ -717,11 +722,7 @@ async function askAI(prompt, imageFile, signal){
       lastErr = e;
       if (['bad_model','rate_limited','server','other'].includes(e.code)) {
         console.warn('Gemini model failed', models[i], e.code, e.message);
-        if (e.message) e.message = models[i] + '：' + e.message;
-        if (i === models.length - 1 && models.length === 1 && AI.model()) {
-          LS.set('fl.geminiModel', '');
-          models = models.concat((await pickModels(key, signal)).filter(n => n !== models[0]).slice(0, 4));
-        }
+        if (models[i] === AI.model()) LS.set('fl.geminiModel', '');
         continue;
       }
       throw e;
