@@ -65,19 +65,19 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;fl
 .setup button{align-self:flex-start;background:var(--accent-ink);color:var(--accent);border:0;border-radius:999px;padding:8px 16px;font-weight:700}
 
 /* balance */
-.balance{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:center}
-.ring{position:relative;width:150px;height:150px}
+.balance{display:flex;flex-direction:column;gap:16px}
+.rings{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.ring{position:relative;width:130px;height:130px;flex:0 0 auto}
 .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
 .ring .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.ring .big{font-size:34px;font-weight:800;line-height:1}
-.ring .lab{font-size:12px;color:var(--muted)}
-.eq{display:flex;flex-direction:column;gap:8px}
+.ring .big{font-size:26px;font-weight:800;line-height:1}
+.ring .lab{font-size:11px;color:var(--muted)}
+.eq{display:flex;flex-direction:column;gap:8px;width:100%}
 .eq .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px dashed var(--line);padding-bottom:6px}
 .eq .row:last-child{border-bottom:0;padding-bottom:0}
 .eq .v{font-size:20px;font-weight:700}
 .eq .op{color:var(--muted);font-size:13px}
 .target-note{font-size:12px;color:var(--muted)}
-@media (max-width:420px){.balance{grid-template-columns:1fr;justify-items:center}.eq{width:100%}}
 
 /* forms */
 .addrow{display:flex;gap:8px;flex-wrap:wrap}
@@ -217,12 +217,21 @@ details[open] summary::after{content:"－"}
   <section class="card" aria-labelledby="balH">
     <h2 id="balH" class="small muted" style="font-weight:500">今日熱量收支</h2>
     <div class="balance">
-      <div class="ring">
-        <svg viewBox="0 0 120 120" aria-hidden="true">
-          <circle cx="60" cy="60" r="52" fill="none" stroke="var(--sunk)" stroke-width="12"/>
-          <circle id="ringArc" cx="60" cy="60" r="52" fill="none" stroke="var(--kcal)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 327"/>
-        </svg>
-        <div class="center"><span class="lab" id="ringLab">還可以吃</span><span class="big num" id="ringNum">0</span><span class="lab">kcal</span></div>
+      <div class="rings">
+        <div class="ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--sunk)" stroke-width="12"/>
+            <circle id="ringArc" cx="60" cy="60" r="52" fill="none" stroke="var(--kcal)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 327"/>
+          </svg>
+          <div class="center"><span class="lab" id="ringLab">還可以吃</span><span class="big num" id="ringNum">0</span><span class="lab">kcal</span></div>
+        </div>
+        <div class="ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--sunk)" stroke-width="12"/>
+            <circle id="proteinArc" cx="60" cy="60" r="52" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 327"/>
+          </svg>
+          <div class="center"><span class="lab" id="proteinRingLab">蛋白質還差</span><span class="big num" id="proteinRingNum">0</span><span class="lab">g</span></div>
+        </div>
       </div>
       <div class="eq">
         <div class="row"><span>每日目標</span><span class="v num" id="eqTarget">0</span></div>
@@ -546,6 +555,10 @@ function renderBalance(){
   $('#eqProtein').childNodes[0].textContent = fmt(protein);
   $('#eqProteinTarget').textContent = fmt(pTarget);
   $('#proteinNote').textContent = pLeft > 0 ? `蛋白質還差 ${fmt(pLeft)}g（目標約體重 × 1.8g，搭配重訓保護肌肉量）。` : '今天蛋白質已達標，很好。';
+  const pArc = $('#proteinArc'), pFrac = pTarget > 0 ? Math.min(protein / pTarget, 1) : 0;
+  pArc.setAttribute('stroke-dasharray', `${(pFrac*C).toFixed(1)} ${C.toFixed(1)}`);
+  $('#proteinRingLab').textContent = pLeft > 0 ? '蛋白質還差' : '蛋白質已達標';
+  $('#proteinRingNum').textContent = pLeft > 0 ? fmt(pLeft) : fmt(protein);
 }
 
 function renderRace(){
