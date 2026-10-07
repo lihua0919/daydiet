@@ -497,6 +497,15 @@ const LS = {
   set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   keys(){ try { return Object.keys(localStorage); } catch { return []; } }
 };
+const customChips = () => LS.get('fl.customChips') || [];
+function saveCustomChip(name, kcal, protein){
+  name = String(name).trim(); if (!name) return false;
+  if (FOODS.some(c => c[0] === name) || customChips().some(c => c[0] === name)) return false;
+  const chips = customChips();
+  chips.unshift([name, Math.round(+kcal || 0), Math.max(0, Math.round(+protein || 0))]);
+  LS.set('fl.customChips', chips);
+  return true;
+}
 const localStore = {
   mode:'local',
   async loadProfile(){ return LS.get('fl.profile'); },
@@ -620,8 +629,8 @@ function renderRace(){
 function renderFoods(){
   const seg = $('#mealSeg'); seg.textContent = '';
   MEALS.forEach(([k,label]) => { const b = document.createElement('button'); b.type='button'; b.textContent = label; b.setAttribute('aria-pressed', k===meal); b.onclick = () => { meal = k; renderFoods(); }; seg.appendChild(b); });
-  const chips = $('#foodChips');
-  if (!chips.childElementCount) FOODS.forEach(([n,k,p]) => {
+  const chips = $('#foodChips'); chips.textContent = '';
+  [...customChips(), ...FOODS].forEach(([n,k,p]) => {
     const b = document.createElement('button'); b.type='button'; b.className='chip'; b.textContent = n;
     const s = document.createElement('b'); s.textContent = k; b.appendChild(s);
     b.onclick = () => addFood(n, k, p); chips.appendChild(b);
@@ -639,11 +648,14 @@ function renderFoods(){
     wrap.appendChild(itemList(items, f => f.name, f => fmt(f.kcal), id => { d.foods = d.foods.filter(f => f.id !== id); persistDay(); renderAll(); }, {
       fields: [{key:'name', type:'text', label:'食物名稱'}, {key:'kcal', type:'number', label:'大卡'}, {key:'protein', type:'number', label:'蛋白質g'}],
       onSave: (f, vals) => { f.name = vals.name || f.name; f.kcal = Math.max(0, Math.round(vals.kcal)); f.protein = Math.max(0, Math.round(vals.protein)); persistDay(); renderAll(); }
+    }, f => {
+      if (saveCustomChip(f.name, f.kcal, f.protein)) { toast(`已把「${f.name}」存成常用食物`); renderFoods(); }
+      else toast(`「${f.name}」已經在常用食物裡了`);
     }));
     box.appendChild(wrap);
   });
 }
-function itemList(items, nameFn, valFn, onDel, editCfg){
+function itemList(items, nameFn, valFn, onDel, editCfg, onPin){
   const ul = document.createElement('ul'); ul.className = 'items';
   items.forEach(it => {
     const li = document.createElement('li');
@@ -661,6 +673,11 @@ function itemList(items, nameFn, valFn, onDel, editCfg){
       const edit = document.createElement('button'); edit.className='del'; edit.type='button'; edit.textContent='✎'; edit.setAttribute('aria-label','修改 '+nameFn(it));
       edit.onclick = () => renderEditRow(li, it);
       li.appendChild(edit);
+    }
+    if (onPin) {
+      const pin = document.createElement('button'); pin.className='del'; pin.type='button'; pin.textContent='☆'; pin.setAttribute('aria-label','存成常用食物 '+nameFn(it));
+      pin.onclick = () => onPin(it);
+      li.appendChild(pin);
     }
     li.appendChild(x);
   }
