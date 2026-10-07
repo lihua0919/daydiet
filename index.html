@@ -114,7 +114,7 @@ input:focus,select:focus{border-color:var(--accent);outline:none}
 @media (max-width:420px){.photo-top{grid-template-columns:1fr}.photo-top img{width:100%;height:180px}}
 .photo-status:empty{display:none}
 .est{display:flex;flex-direction:column;gap:6px}
-.est-row{display:grid;grid-template-columns:auto minmax(0,1fr) 82px;gap:8px;align-items:center}
+.est-row{display:grid;grid-template-columns:auto minmax(0,1fr) 62px 62px;gap:6px;align-items:center}
 .est-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
 .est-row input[type=text],.est-row input[type=number]{background:var(--surface);height:38px}
 .est-portion{grid-column:2/-1;font-size:12px;color:var(--muted);margin-top:-4px}
@@ -228,7 +228,9 @@ details[open] summary::after{content:"－"}
         <div class="row"><span>每日目標</span><span class="v num" id="eqTarget">0</span></div>
         <div class="row"><span><span class="op">－</span> 飲食攝取</span><span class="v num" id="eqIn" style="color:var(--kcal)">0</span></div>
         <div class="row"><span><span class="op">＋</span> 運動消耗</span><span class="v num" id="eqEx" style="color:var(--move)">0</span></div>
+        <div class="row"><span>蛋白質</span><span class="v num" id="eqProtein" style="color:var(--accent)">0<small style="font-weight:500;font-size:12px;color:var(--muted)"> / <span id="eqProteinTarget">0</span>g</small></span></div>
         <div class="target-note" id="targetNote"></div>
+        <div class="target-note" id="proteinNote"></div>
       </div>
     </div>
   </section>
@@ -273,6 +275,7 @@ details[open] summary::after{content:"－"}
     <form class="addrow" id="foodForm">
       <input type="text" id="foodName" class="grow" placeholder="吃了什麼？例：牛肉麵" autocomplete="off" required>
       <input type="number" id="foodKcal" class="w90" placeholder="大卡" min="0" max="5000" inputmode="numeric" required>
+      <input type="number" id="foodProtein" class="w90" placeholder="蛋白質g（選填）" min="0" max="300" inputmode="numeric">
       <button class="btn" type="submit">加入</button>
     </form>
     <p class="hint">點上面的常見食物會直接加入目前選的餐別。數字是一般份量的估算值，包裝食品請以營養標示為準。</p>
@@ -435,10 +438,10 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
 const MEALS = [['b','早餐'],['l','午餐'],['d','晚餐'],['s','點心']];
 const FOODS = [
-  ['白飯一碗',280],['糙米飯一碗',260],['滷肉飯（小）',450],['雞腿便當',850],['排骨便當',900],['牛肉麵',650],
-  ['陽春麵',350],['水餃 10 顆',500],['御飯糰',220],['茶葉蛋',75],['地瓜（中）',180],['燙青菜',60],
-  ['雞胸肉 100g',165],['鮭魚 100g',210],['香蕉',100],['蘋果',80],['芭樂',70],['無糖豆漿 400ml',140],
-  ['鮮奶 240ml',150],['拿鐵（中杯）',180],['珍珠奶茶（全糖大杯）',700],['鹽酥雞一份',600]
+  ['白飯一碗',280,5],['糙米飯一碗',260,5],['滷肉飯（小）',450,15],['雞腿便當',850,45],['排骨便當',900,40],['牛肉麵',650,35],
+  ['陽春麵',350,10],['水餃 10 顆',500,18],['御飯糰',220,6],['茶葉蛋',75,7],['地瓜（中）',180,2],['燙青菜',60,2],
+  ['雞胸肉 100g',165,31],['鮭魚 100g',210,22],['香蕉',100,1],['蘋果',80,0],['芭樂',70,1],['無糖豆漿 400ml',140,14],
+  ['鮮奶 240ml',150,8],['拿鐵（中杯）',180,7],['珍珠奶茶（全糖大杯）',700,3],['鹽酥雞一份',600,30]
 ];
 const EXS = [
   ['快走',4.3],['散步',3.0],['騎腳踏車（休閒）',6.8],['騎腳踏車（快騎）',10],['慢跑',8.0],['游泳',6.0],
@@ -504,6 +507,7 @@ function calc(p){
 }
 const targets = () => { const c = calc(profile); return { kcal: c ? c.target : 1800, water: c ? c.water : 2000, set: !!c }; };
 const bodyWeight = () => { const ws = Object.values(days).filter(d => d.weight).sort((a,b)=>a.date<b.date?1:-1); return (ws[0] && ws[0].weight) || (profile && profile.weight) || 60; };
+const proteinTarget = () => Math.round(bodyWeight() * 1.8);
 const bodyFatNow = () => { const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?1:-1); return (fs[0] && fs[0].fat) || (profile && profile.fat) || null; };
 const bodyFatBaseline = () => { if (profile && profile.fat) return profile.fat; const fs = Object.values(days).filter(d => d.fat).sort((a,b)=>a.date<b.date?-1:1); return (fs[0] && fs[0].fat) || null; };
 const bodyMuscleNow = () => { const ms = Object.values(days).filter(d => d.muscle).sort((a,b)=>a.date<b.date?1:-1); return (ms[0] && ms[0].muscle) || (profile && profile.muscle) || null; };
@@ -518,10 +522,10 @@ function renderHeader(){
   $('#dateLabel').textContent = `${d.getMonth()+1}/${d.getDate()} ${rel}`;
   $('#nextDay').disabled = cur >= today;
 }
-function sums(d){ return { inK: d.foods.reduce((a,f)=>a+(+f.kcal||0),0), exK: d.ex.reduce((a,e)=>a+(+e.kcal||0),0) }; }
+function sums(d){ return { inK: d.foods.reduce((a,f)=>a+(+f.kcal||0),0), exK: d.ex.reduce((a,e)=>a+(+e.kcal||0),0), protein: d.foods.reduce((a,f)=>a+(+f.protein||0),0) }; }
 
 function renderBalance(){
-  const t = targets(), d = getDay(cur), { inK, exK } = sums(d);
+  const t = targets(), d = getDay(cur), { inK, exK, protein } = sums(d);
   const left = t.kcal - inK + exK, budget = t.kcal + exK;
   const frac = budget > 0 ? Math.min(inK / budget, 1) : 0, C = 2*Math.PI*52;
   const arc = $('#ringArc');
@@ -537,6 +541,10 @@ function renderBalance(){
   $('#targetNote').textContent = !c ? '目前用預設目標，設定個人資料後會自動計算。'
     : profile.override ? '使用你自訂的熱量目標。'
     : c.floored ? `已調到最低建議攝取 ${fmt(c.floor)} kcal，吃太少反而容易掉肌肉。` : `依你的身體數據與目標自動計算。`;
+  const pTarget = proteinTarget(), pLeft = pTarget - protein;
+  $('#eqProtein').childNodes[0].textContent = fmt(protein);
+  $('#eqProteinTarget').textContent = fmt(pTarget);
+  $('#proteinNote').textContent = pLeft > 0 ? `蛋白質還差 ${fmt(pLeft)}g（目標約體重 × 1.8g，搭配重訓保護肌肉量）。` : '今天蛋白質已達標，很好。';
 }
 
 function renderRace(){
@@ -585,10 +593,10 @@ function renderFoods(){
   const seg = $('#mealSeg'); seg.textContent = '';
   MEALS.forEach(([k,label]) => { const b = document.createElement('button'); b.type='button'; b.textContent = label; b.setAttribute('aria-pressed', k===meal); b.onclick = () => { meal = k; renderFoods(); }; seg.appendChild(b); });
   const chips = $('#foodChips');
-  if (!chips.childElementCount) FOODS.forEach(([n,k]) => {
+  if (!chips.childElementCount) FOODS.forEach(([n,k,p]) => {
     const b = document.createElement('button'); b.type='button'; b.className='chip'; b.textContent = n;
     const s = document.createElement('b'); s.textContent = k; b.appendChild(s);
-    b.onclick = () => addFood(n, k); chips.appendChild(b);
+    b.onclick = () => addFood(n, k, p); chips.appendChild(b);
   });
   const d = getDay(cur), box = $('#foodList'); box.textContent = '';
   if (!d.foods.length) { box.innerHTML = '<div class="empty">還沒有紀錄。輸入食物和大卡，或點上面的常見食物。</div>'; return; }
@@ -597,11 +605,12 @@ function renderFoods(){
     const wrap = document.createElement('div'); wrap.className = 'meal';
     const h = document.createElement('div'); h.className='meal-h';
     const hl = document.createElement('span'); hl.textContent = label;
-    const hk = document.createElement('span'); hk.className='num'; hk.textContent = fmt(items.reduce((a,f)=>a+ +f.kcal,0)) + ' kcal';
+    const pSum = items.reduce((a,f)=>a+(+f.protein||0),0);
+    const hk = document.createElement('span'); hk.className='num'; hk.textContent = fmt(items.reduce((a,f)=>a+ +f.kcal,0)) + ' kcal' + (pSum ? '・' + fmt(pSum) + 'g蛋白' : '');
     h.append(hl, hk); wrap.appendChild(h);
     wrap.appendChild(itemList(items, f => f.name, f => fmt(f.kcal), id => { d.foods = d.foods.filter(f => f.id !== id); persistDay(); renderAll(); }, {
-      fields: [{key:'name', type:'text', label:'食物名稱'}, {key:'kcal', type:'number', label:'大卡'}],
-      onSave: (f, vals) => { f.name = vals.name || f.name; f.kcal = Math.max(0, Math.round(vals.kcal)); persistDay(); renderAll(); }
+      fields: [{key:'name', type:'text', label:'食物名稱'}, {key:'kcal', type:'number', label:'大卡'}, {key:'protein', type:'number', label:'蛋白質g'}],
+      onSave: (f, vals) => { f.name = vals.name || f.name; f.kcal = Math.max(0, Math.round(vals.kcal)); f.protein = Math.max(0, Math.round(vals.protein)); persistDay(); renderAll(); }
     }));
     box.appendChild(wrap);
   });
@@ -631,7 +640,7 @@ function itemList(items, nameFn, valFn, onDel, editCfg){
     li.classList.add('editing'); li.textContent = '';
     const inputs = editCfg.fields.map(f => {
       const inp = document.createElement('input');
-      inp.type = f.type; inp.className = 'edit-' + f.key + (f.type === 'number' ? ' num' : ''); inp.value = it[f.key];
+      inp.type = f.type; inp.className = 'edit-' + f.key + (f.type === 'number' ? ' num' : ''); inp.value = it[f.key] ?? '';
       inp.setAttribute('aria-label', f.label);
       return inp;
     });
@@ -648,10 +657,10 @@ function itemList(items, nameFn, valFn, onDel, editCfg){
   }
   return ul;
 }
-function addFood(name, kcal){
-  name = String(name).trim(); kcal = Math.round(+kcal);
+function addFood(name, kcal, protein){
+  name = String(name).trim(); kcal = Math.round(+kcal); protein = Math.max(0, Math.round(+protein || 0));
   if (!name || !(kcal >= 0)) return;
-  getDay(cur).foods.push({ id: uid(), meal, name, kcal });
+  getDay(cur).foods.push({ id: uid(), meal, name, kcal, protein });
   persistDay(); renderAll();
   toast(`已加入${MEALS.find(m=>m[0]===meal)[1]}：${name}`);
 }
@@ -932,13 +941,14 @@ ${note ? '使用者補充說明：「' + note.slice(0, 200) + '」，請依此�
 - 每一樣分開列，名稱用繁體中文、簡短（例：「白飯」「滷排骨」「燙青菜」）。
 - portion 寫你估計的份量，例：「約 1 碗（200g）」。
 - kcal 為整數。看不清楚時取合理的中間值，不要漏掉醬料、湯、飲料。
+- protein 為估計的蛋白質公克數（整數），依食材和份量估算，例如雞胸肉、魚、豆製品、蛋、奶類蛋白質較高，米飯、蔬菜、水果較低。
 - 若照片中沒有食物，items 回傳空陣列，並在 note 說明。
 只回覆 JSON，格式：
-{"items":[{"name":"白飯","portion":"約 1 碗（200g）","kcal":280}],"note":"一句話提醒，例如估算依據或可以怎麼吃更好"}`;
+{"items":[{"name":"白飯","portion":"約 1 碗（200g）","kcal":280,"protein":5}],"note":"一句話提醒，例如估算依據或可以怎麼吃更好"}`;
   try {
     const res = await askAI(prompt, textMode ? null : photoFile, photoCtl.signal);
     const items = (res && Array.isArray(res.items) ? res.items : [])
-      .map(it => ({ name: String(it.name || '').trim().slice(0, 40), portion: String(it.portion || '').slice(0, 60), kcal: Math.max(0, Math.round(+it.kcal || 0)) }))
+      .map(it => ({ name: String(it.name || '').trim().slice(0, 40), portion: String(it.portion || '').slice(0, 60), kcal: Math.max(0, Math.round(+it.kcal || 0)), protein: Math.max(0, Math.round(+it.protein || 0)) }))
       .filter(it => it.name);
     photoMsg('');
     renderEstimate(items, res && res.note ? String(res.note).slice(0, 200) : '');
@@ -954,29 +964,33 @@ function renderEstimate(items, note){
   if (!items.length) { photoMsg(note || (textMode ? '沒有認出食物，請寫得更具體一點。' : '照片裡沒有認出食物，請換一張再試。')); return; }
   const wrap = document.createElement('div'); wrap.className = 'est';
   const h = document.createElement('div'); h.className = 'small'; h.style.fontWeight = '700';
-  h.textContent = `辨識到 ${items.length} 樣，可以修改名稱和大卡，取消勾選就不會加入：`;
+  h.textContent = `辨識到 ${items.length} 樣，可以修改名稱、大卡和蛋白質，取消勾選就不會加入：`;
   wrap.appendChild(h);
   const rows = items.map((it, i) => {
     const r = document.createElement('div'); r.className = 'est-row';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true; cb.id = 'estc' + i; cb.setAttribute('aria-label', '加入 ' + it.name);
     const nm = document.createElement('input'); nm.type = 'text'; nm.value = it.name; nm.id = 'estn' + i; nm.setAttribute('aria-label', '食物名稱');
-    const kc = document.createElement('input'); kc.type = 'number'; kc.min = 0; kc.value = it.kcal; kc.id = 'estk' + i; kc.className = 'num'; kc.setAttribute('aria-label', '大卡');
-    r.append(cb, nm, kc);
+    const kc = document.createElement('input'); kc.type = 'number'; kc.min = 0; kc.value = it.kcal; kc.id = 'estk' + i; kc.className = 'num'; kc.setAttribute('aria-label', '大卡'); kc.placeholder = 'kcal';
+    const pr = document.createElement('input'); pr.type = 'number'; pr.min = 0; pr.value = it.protein ?? 0; pr.id = 'estp' + i; pr.className = 'num'; pr.setAttribute('aria-label', '蛋白質g'); pr.placeholder = '蛋白g';
+    r.append(cb, nm, kc, pr);
     if (it.portion) { const p = document.createElement('div'); p.className = 'est-portion'; p.textContent = it.portion; r.appendChild(p); }
     wrap.appendChild(r);
-    return { cb, nm, kc };
+    return { cb, nm, kc, pr };
   });
   const foot = document.createElement('div'); foot.className = 'est-foot';
   const tot = document.createElement('span'); tot.className = 'num'; tot.style.fontWeight = '700';
-  const upd = () => { tot.textContent = '合計 ' + fmt(rows.filter(r => r.cb.checked).reduce((a, r) => a + (+r.kc.value || 0), 0)) + ' kcal'; };
-  rows.forEach(r => { r.cb.onchange = upd; r.kc.oninput = upd; }); upd();
+  const upd = () => {
+    const picked = rows.filter(r => r.cb.checked);
+    tot.textContent = '合計 ' + fmt(picked.reduce((a, r) => a + (+r.kc.value || 0), 0)) + ' kcal・' + fmt(picked.reduce((a, r) => a + (+r.pr.value || 0), 0)) + 'g蛋白';
+  };
+  rows.forEach(r => { r.cb.onchange = upd; r.kc.oninput = upd; r.pr.oninput = upd; }); upd();
   const add = document.createElement('button'); add.className = 'btn'; add.type = 'button';
   add.textContent = '加入' + MEALS.find(m => m[0] === meal)[1];
   add.onclick = () => {
     const picked = rows.filter(r => r.cb.checked && r.nm.value.trim());
     if (!picked.length) { photoMsg('請至少勾選一樣。'); return; }
     const d = getDay(cur);
-    picked.forEach(r => d.foods.push({ id: uid(), meal, name: r.nm.value.trim(), photo: true, kcal: Math.max(0, Math.round(+r.kc.value || 0)) }));
+    picked.forEach(r => d.foods.push({ id: uid(), meal, name: r.nm.value.trim(), photo: true, kcal: Math.max(0, Math.round(+r.kc.value || 0)), protein: Math.max(0, Math.round(+r.pr.value || 0)) }));
     persistDay(); const n = picked.length; resetPhoto(); renderAll();
     toast(`已加入 ${n} 樣到${MEALS.find(m => m[0] === meal)[1]}`);
   };
@@ -989,11 +1003,12 @@ function renderEstimate(items, note){
 
 // ---------- AI coach ----------
 function buildCoachPrompt(){
-  const t = targets(), d = getDay(today), { inK, exK } = sums(d);
+  const t = targets(), d = getDay(today), { inK, exK, protein } = sums(d);
   const left = t.kcal - inK + exK;
+  const pTarget = proteinTarget(), pLeft = pTarget - protein;
   const loggedMeals = MEALS.map(([k,label]) => {
     const items = d.foods.filter(f => f.meal === k);
-    return items.length ? `${label}：${items.map(f=>`${f.name}(${f.kcal}kcal)`).join('、')}` : `${label}：還沒記錄`;
+    return items.length ? `${label}：${items.map(f=>`${f.name}(${f.kcal}kcal${f.protein?'，蛋白'+f.protein+'g':''})`).join('、')}` : `${label}：還沒記錄`;
   }).join('\n');
   const curW = bodyWeight(), curF = bodyFatNow();
   const dl = profile && profile.deadline;
@@ -1044,11 +1059,12 @@ ${muscleLine}
 ${weekLine}
 ${paceLine}
 今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
+蛋白質目標約 ${fmt(pTarget)}g（體重 × 1.8g），今天已吃 ${fmt(protein)}g，${pLeft > 0 ? '還差 ' + fmt(pLeft) + 'g' : '已達標'}。使用者特別在意蛋白質攝取是否足夠搭配重訓，建議接下來的餐要優先把蛋白質缺口補足，不是只看熱量夠不夠。
 今天各餐記錄：
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
-請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練保護並盡量增加肌肉量（這對平手判定的肌肉增加率有幫助）。這場比賽主要是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
-{"summary":"一句話總評，結合今天狀況和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
+請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練和足夠蛋白質保護並盡量增加肌肉量（這對平手判定的肌肉增加率有幫助）。這場比賽主要是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
+{"summary":"一句話總評，結合今天狀況、蛋白質攝取和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡和蛋白質g，優先補足蛋白質缺口；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
   const btn = $('#coachGo'); btn.disabled = true; $('#coachResult').textContent = '';
@@ -1081,7 +1097,7 @@ function renderCoach(res){
 // ---------- events ----------
 $('#prevDay').onclick = () => { cur = addDays(cur,-1); renderAll(); };
 $('#nextDay').onclick = () => { if (cur < today) { cur = addDays(cur,1); renderAll(); } };
-$('#foodForm').addEventListener('submit', e => { e.preventDefault(); addFood($('#foodName').value, $('#foodKcal').value); $('#foodName').value=''; $('#foodKcal').value=''; $('#foodName').focus(); });
+$('#foodForm').addEventListener('submit', e => { e.preventDefault(); addFood($('#foodName').value, $('#foodKcal').value, $('#foodProtein').value); $('#foodName').value=''; $('#foodKcal').value=''; $('#foodProtein').value=''; $('#foodName').focus(); });
 document.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { const d = getDay(cur); d.water = Math.max(0, (d.water||0) + +b.dataset.water); persistDay(); renderAll(); });
 $('#exForm').addEventListener('submit', e => {
   e.preventDefault(); const [name, met] = EXS[+$('#exType').value]; const min = Math.round(+$('#exMin').value); if (!(min>0)) return;
