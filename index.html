@@ -329,7 +329,7 @@ details[open] summary::after{content:"－"}
     <div class="photo" style="margin-bottom:2px">
       <label class="photo-btn" for="bodyPhotoInput" style="background:var(--accent);color:var(--accent-ink);height:48px;font-size:15px">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
-        <span>拍照讀取體脂機數據</span>
+        <span>拍照讀取體脂機／血壓機數據</span>
       </label>
       <input type="file" id="bodyPhotoInput" accept="image/*" hidden>
       <div class="photo-status small muted" id="bodyPhotoStatus" role="status" aria-live="polite"></div>
@@ -340,6 +340,9 @@ details[open] summary::after{content:"－"}
       <label>體脂率<span class="unit-in"><input type="number" id="fatInput" step="0.1" min="3" max="70" placeholder="38" inputmode="decimal"><em>%</em></span></label>
       <label>腰圍<span class="unit-in"><input type="number" id="waistInput" step="0.1" min="40" max="200" placeholder="83.9" inputmode="decimal"><em>cm</em></span></label>
       <label>空腹血糖<span class="unit-in"><input type="number" id="gluInput" step="1" min="30" max="600" placeholder="100" inputmode="numeric"><em>mg/dL</em></span></label>
+      <label>收縮壓<span class="unit-in"><input type="number" id="bpSysInput" step="1" min="60" max="260" placeholder="128" inputmode="numeric"><em>mmHg</em></span></label>
+      <label>舒張壓<span class="unit-in"><input type="number" id="bpDiaInput" step="1" min="40" max="160" placeholder="82" inputmode="numeric"><em>mmHg</em></span></label>
+      <label>心跳<span class="unit-in"><input type="number" id="pulseInput" step="1" min="30" max="220" placeholder="72" inputmode="numeric"><em>bpm</em></span></label>
       <label style="grid-column:1/-1;flex-direction:row;align-items:center;gap:6px">
         <input type="checkbox" id="fatIsHome" style="width:18px;height:18px;accent-color:var(--accent);flex:0 0 auto">
         <span>體脂率填的是家用體脂計讀數（自動校正）</span>
@@ -469,17 +472,21 @@ let cur = today;
 let profile = null;
 let days = {};           // date -> day doc
 let meal = (() => { const h = new Date().getHours(); return h < 10 ? 'b' : h < 14 ? 'l' : h < 17 ? 's' : 'd'; })();
-const emptyDay = d => ({ kind:'day', date:d, foods:[], ex:[], water:0, weight:null, fat:null, glucose:null, muscle:null, waist:null });
+const emptyDay = d => ({ kind:'day', date:d, foods:[], ex:[], water:0, weight:null, fat:null, glucose:null, muscle:null, waist:null, bpSys:null, bpDia:null, pulse:null });
 let metric = 'weight';
 const METRICS = {
   weight: { label:'體重', unit:'kg', dec:1, color:'var(--accent)', goal: () => profile && profile.goalWeight ? +profile.goalWeight : null, goalLabel:'目標' },
   fat:    { label:'體脂率', unit:'%', dec:1, color:'var(--kcal)', goal: () => profile && profile.goalFat ? +profile.goalFat : null, goalLabel:'目標' },
   muscle: { label:'骨骼肌肉重', unit:'kg', dec:1, color:'var(--move)', goal: () => null, goalLabel:'目標' },
   waist:  { label:'腰圍', unit:'cm', dec:1, color:'var(--water)', goal: () => null, goalLabel:'目標' },
-  glucose:{ label:'空腹血糖', unit:'mg/dL', dec:0, color:'var(--water)', goal: () => 100, goalLabel:'正常上限 100' }
+  glucose:{ label:'空腹血糖', unit:'mg/dL', dec:0, color:'var(--water)', goal: () => 100, goalLabel:'正常上限 100' },
+  bpSys:  { label:'收縮壓', unit:'mmHg', dec:0, color:'var(--move)', goal: () => 120, goalLabel:'正常上限 120' },
+  bpDia:  { label:'舒張壓', unit:'mmHg', dec:0, color:'var(--kcal)', goal: () => 80, goalLabel:'正常上限 80' },
+  pulse:  { label:'心跳', unit:'bpm', dec:0, color:'var(--accent)', goal: () => null, goalLabel:'目標' }
 };
 const gluLevel = g => g < 100 ? ['ok','正常'] : g < 126 ? ['mid','偏高'] : ['hi','高，建議就醫確認'];
 const fatLevel = f => f < 31 ? ['ok','標準'] : f < 36 ? ['mid','偏高'] : ['hi','肥胖範圍']; // 成年女性參考
+const bpLevel = (sys, dia) => sys >= 180 || dia >= 120 ? ['hi','過高，建議就醫'] : sys >= 140 || dia >= 90 ? ['hi','高血壓範圍'] : sys >= 130 || dia >= 80 ? ['mid','偏高'] : sys >= 120 ? ['mid','略高'] : ['ok','正常'];
 const getDay = d => days[d] || (days[d] = emptyDay(d));
 
 // ---------- storage ----------
@@ -725,7 +732,7 @@ function stat(label, val, unit, level){
 }
 function renderWeight(){
   const d = getDay(cur);
-  [['#wInput','weight'],['#fatInput','fat'],['#gluInput','glucose'],['#muscleInput','muscle'],['#waistInput','waist']].forEach(([sel,k]) => { const inp = $(sel); if (document.activeElement !== inp) inp.value = d[k] ?? ''; });
+  [['#wInput','weight'],['#fatInput','fat'],['#gluInput','glucose'],['#muscleInput','muscle'],['#waistInput','waist'],['#bpSysInput','bpSys'],['#bpDiaInput','bpDia'],['#pulseInput','pulse']].forEach(([sel,k]) => { const inp = $(sel); if (document.activeElement !== inp) inp.value = d[k] ?? ''; });
   // derived numbers for the selected day
   const st = $('#bodyStats'); st.textContent = '';
   const h = profile && profile.height ? profile.height/100 : null;
@@ -742,6 +749,8 @@ function renderWeight(){
   }
   if (d.waist) st.appendChild(stat('腰圍', d.waist, 'cm'));
   if (d.glucose) st.appendChild(stat('空腹血糖', d.glucose, 'mg/dL', gluLevel(d.glucose)));
+  if (d.bpSys && d.bpDia) st.appendChild(stat('血壓', `${d.bpSys}/${d.bpDia}`, 'mmHg', bpLevel(d.bpSys, d.bpDia)));
+  if (d.pulse) st.appendChild(stat('心跳', d.pulse, 'bpm'));
   if (!st.childElementCount) st.innerHTML = '<div class="empty" style="grid-column:1/-1">記下今天的體重、體脂和血糖，這裡會算出 BMI、體脂肪重和去脂體重。</div>';
 
   const seg = $('#metricSeg'); seg.textContent = '';
@@ -1149,17 +1158,18 @@ $('#wForm').addEventListener('submit', e => {
     d.fat = rawFat;
     fatNote = d.fat ? `體脂 ${d.fat}%` : '';
   }
-  d.weight = num('#wInput',1); d.glucose = num('#gluInput',0); d.muscle = num('#muscleInput',1); d.waist = num('#waistInput',1); persistDay();
+  d.weight = num('#wInput',1); d.glucose = num('#gluInput',0); d.muscle = num('#muscleInput',1); d.waist = num('#waistInput',1);
+  d.bpSys = num('#bpSysInput',0); d.bpDia = num('#bpDiaInput',0); d.pulse = num('#pulseInput',0); persistDay();
   if (d.weight && cur === today && profile) { profile.weight = d.weight; store.saveProfile(profile); fillProfileForm(); }
   $('#fatIsHome').checked = false;
   document.activeElement && document.activeElement.blur(); renderAll();
-  const parts = [d.weight && `${d.weight} kg`, fatNote, d.muscle && `肌肉 ${d.muscle}kg`, d.waist && `腰圍 ${d.waist}cm`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
+  const parts = [d.weight && `${d.weight} kg`, fatNote, d.muscle && `肌肉 ${d.muscle}kg`, d.waist && `腰圍 ${d.waist}cm`, d.glucose && `血糖 ${d.glucose}`, (d.bpSys && d.bpDia) && `血壓 ${d.bpSys}/${d.bpDia}`, d.pulse && `心跳 ${d.pulse}`].filter(Boolean);
   toast(parts.length ? '已記錄 ' + parts.join('、') : '已清除今天的身體數據');
 });
 $('#wClear').onclick = () => {
   const d = getDay(cur);
-  if (!d.weight && !d.fat && !d.glucose && !d.muscle && !d.waist) { toast('這天本來就沒有身體數據'); return; }
-  d.weight = null; d.fat = null; d.glucose = null; d.muscle = null; d.waist = null;
+  if (!d.weight && !d.fat && !d.glucose && !d.muscle && !d.waist && !d.bpSys && !d.bpDia && !d.pulse) { toast('這天本來就沒有身體數據'); return; }
+  d.weight = null; d.fat = null; d.glucose = null; d.muscle = null; d.waist = null; d.bpSys = null; d.bpDia = null; d.pulse = null;
   persistDay(); document.activeElement && document.activeElement.blur(); renderAll();
   toast('已清除這天的身體數據');
 };
@@ -1169,20 +1179,25 @@ $('#bodyPhotoInput').addEventListener('change', async e => {
   if (!AI.key()) { st.textContent = PHOTO_ERR.no_key; $('#photoWarn').hidden = false; e.target.value = ''; return; }
   st.textContent = '正在讀取照片上的數字，大約需要 5–20 秒…';
   const ctl = new AbortController();
-  const prompt = `這是一張體脂計／體組成分析 App 的畫面截圖。請讀出畫面上清楚顯示的數值，看不到或看不清楚的欄位留 null，不要用猜的或換算的。只回覆 JSON：
-{"weightKg": 數字或null, "fatPercent": 數字或null, "muscleKg": 數字或null（只有畫面上明確標示公斤/kg 的「骨骼肌肉重」或「肌肉重」才填這裡，不要把骨重或其他重量填進來）, "muscleRatePercent": 數字或null（如果畫面上是「肌肉率」這種百分比數值，填這裡，不要跟 muscleKg 搞混，兩者是不同東西）, "waistCm": 數字或null, "note": "一句話說明辨識到哪些欄位，或有沒有不確定的地方"}`;
+  const prompt = `這是一張體組成分析（體脂計）App 畫面，或是血壓計螢幕的照片。請讀出畫面上清楚顯示的數值，看不到或看不清楚的欄位留 null，不要用猜的或換算的。只回覆 JSON：
+{"weightKg": 數字或null, "fatPercent": 數字或null, "muscleKg": 數字或null（只有畫面上明確標示公斤/kg 的「骨骼肌肉重」或「肌肉重」才填這裡，不要把骨重或其他重量填進來）, "muscleRatePercent": 數字或null（如果畫面上是「肌肉率」這種百分比數值，填這裡，不要跟 muscleKg 搞混，兩者是不同東西）, "waistCm": 數字或null, "bpSys": 數字或null（血壓計的收縮壓，通常是上面或左邊比較大的數字）, "bpDia": 數字或null（血壓計的舒張壓，通常是下面或右邊比較小的數字）, "pulse": 數字或null（血壓計顯示的心跳/脈搏，PULSE或心形圖案旁的數字）, "note": "一句話說明辨識到哪些欄位，或有沒有不確定的地方"}`;
   try {
     const res = await askAI(prompt, f, ctl.signal);
     if (res.weightKg) $('#wInput').value = res.weightKg;
     if (res.fatPercent) { $('#fatInput').value = res.fatPercent; $('#fatIsHome').checked = true; }
     if (res.muscleKg) $('#muscleInput').value = res.muscleKg;
     if (res.waistCm) $('#waistInput').value = res.waistCm;
+    if (res.bpSys) $('#bpSysInput').value = res.bpSys;
+    if (res.bpDia) $('#bpDiaInput').value = res.bpDia;
+    if (res.pulse) $('#pulseInput').value = res.pulse;
     const parts = [];
     if (res.weightKg) parts.push('體重 ' + res.weightKg + 'kg');
     if (res.fatPercent) parts.push('體脂率 ' + res.fatPercent + '%（記錄時會自動校正）');
     if (res.muscleKg) parts.push('骨骼肌肉重 ' + res.muscleKg + 'kg');
     if (res.muscleRatePercent) parts.push('肌肉率 ' + res.muscleRatePercent + '%（跟 InBody 的骨骼肌肉重定義不同，沒有自動填入，僅供參考）');
     if (res.waistCm) parts.push('腰圍 ' + res.waistCm + 'cm');
+    if (res.bpSys && res.bpDia) parts.push('血壓 ' + res.bpSys + '/' + res.bpDia);
+    if (res.pulse) parts.push('心跳 ' + res.pulse);
     st.textContent = parts.length ? '已讀取：' + parts.join('、') + '。確認數字沒問題後按下面「記錄」。' : (res.note ? res.note : '沒有讀到清楚的數字，請手動輸入。');
   } catch (err) {
     const code = err && err.code;
