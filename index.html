@@ -240,9 +240,15 @@ details[open] summary::after{content:"－"}
         <div class="row"><span>蛋白質</span><span class="v num" id="eqProtein" style="color:var(--accent)">0<small style="font-weight:500;font-size:12px;color:var(--muted)"> / <span id="eqProteinTarget">0</span>g</small></span></div>
         <div class="target-note" id="targetNote"></div>
         <div class="target-note" id="proteinNote"></div>
-        <div class="target-note" id="fastNote" hidden></div>
       </div>
     </div>
+    <div class="addrow" style="margin:0;align-items:center">
+      <span class="small muted" style="flex:0 0 auto">168 進食窗口</span>
+      <input type="time" id="fastStartQuick" style="flex:1 1 90px;min-width:0">
+      <span class="small muted" style="flex:0 0 auto">–</span>
+      <input type="time" id="fastEndQuick" style="flex:1 1 90px;min-width:0">
+    </div>
+    <div class="target-note" id="fastNote" hidden></div>
   </section>
 
   <!-- Race countdown -->
@@ -408,9 +414,7 @@ details[open] summary::after{content:"－"}
       <label class="full">名次目標（選填）<input type="text" id="pRankGoal" placeholder="例如：前 10 名，共 430 人參賽" maxlength="60" autocomplete="off"></label>
       <label class="full">健康狀況備註（選填）<input type="text" id="pHealthNote" placeholder="例如：膝蓋不好、血壓偏高病史、中度脂肪肝、看過新陳代謝科" maxlength="200" autocomplete="off"></label>
       <p class="hint full" style="margin:0">填了之後 AI 教練建議運動時會避開對這些狀況不好的動作，例如膝蓋不好會少建議跑跳類運動。</p>
-      <label>168 斷食開始進食<input type="time" id="pFastStart"></label>
-      <label>168 斷食結束進食<input type="time" id="pFastEnd"></label>
-      <p class="hint full" style="margin:0">兩個都填才會啟用，例如中午12點到晚上8點就填 12:00 和 20:00。首頁會顯示目前在不在進食窗口內，AI 建議也會配合這個時間安排三餐。</p>
+      <p class="hint full" style="margin:0">168 斷食的進食窗口時間改到最上面「今日熱量收支」卡片直接調整，因為每天可能不一樣，不用來這裡設定。</p>
       <label class="full">搭配高碳日／作弊餐
         <select id="pCarbCycle">
           <option value="">不特別安排</option>
@@ -600,6 +604,9 @@ function renderBalance(){
 }
 
 function renderFast(){
+  const sEl = $('#fastStartQuick'), eEl = $('#fastEndQuick');
+  if (document.activeElement !== sEl) sEl.value = (profile && profile.fastStart) || '';
+  if (document.activeElement !== eEl) eEl.value = (profile && profile.fastEnd) || '';
   const el = $('#fastNote');
   if (cur !== today || !profile || !profile.fastStart || !profile.fastEnd) { el.hidden = true; return; }
   const toMin = s => { const [h,m] = s.split(':').map(Number); return h*60+m; };
@@ -876,15 +883,13 @@ function fillProfileForm(){
   $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pRankGoal').value = p.rankGoal ?? '';
   $('#pHealthNote').value = p.healthNote ?? '';
-  $('#pFastStart').value = p.fastStart ?? '';
-  $('#pFastEnd').value = p.fastEnd ?? '';
   $('#pCarbCycle').value = p.carbCycle ?? '';
   $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, healthNote: $('#pHealthNote').value.trim() || null, fastStart: $('#pFastStart').value || null, fastEnd: $('#pFastEnd').value || null, carbCycle: $('#pCarbCycle').value || null, override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, healthNote: $('#pHealthNote').value.trim() || null, fastStart: profile ? profile.fastStart : null, fastEnd: profile ? profile.fastEnd : null, carbCycle: $('#pCarbCycle').value || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -1252,6 +1257,15 @@ $('#wClear').onclick = () => {
   persistDay(); document.activeElement && document.activeElement.blur(); renderAll();
   toast('已清除這天的身體數據');
 };
+function saveFastWindow(){
+  if (!profile) profile = {};
+  profile.fastStart = $('#fastStartQuick').value || null;
+  profile.fastEnd = $('#fastEndQuick').value || null;
+  store.saveProfile(profile);
+  renderAll();
+}
+$('#fastStartQuick').addEventListener('change', saveFastWindow);
+$('#fastEndQuick').addEventListener('change', saveFastWindow);
 $('#bodyPhotoInput').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0]; if (!f) return;
   const st = $('#bodyPhotoStatus');
