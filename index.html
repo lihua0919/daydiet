@@ -240,6 +240,7 @@ details[open] summary::after{content:"－"}
         <div class="row"><span>蛋白質</span><span class="v num" id="eqProtein" style="color:var(--accent)">0<small style="font-weight:500;font-size:12px;color:var(--muted)"> / <span id="eqProteinTarget">0</span>g</small></span></div>
         <div class="target-note" id="targetNote"></div>
         <div class="target-note" id="proteinNote"></div>
+        <div class="target-note" id="fastNote" hidden></div>
       </div>
     </div>
   </section>
@@ -407,6 +408,18 @@ details[open] summary::after{content:"－"}
       <label class="full">名次目標（選填）<input type="text" id="pRankGoal" placeholder="例如：前 10 名，共 430 人參賽" maxlength="60" autocomplete="off"></label>
       <label class="full">健康狀況備註（選填）<input type="text" id="pHealthNote" placeholder="例如：膝蓋不好、血壓偏高病史、中度脂肪肝、看過新陳代謝科" maxlength="200" autocomplete="off"></label>
       <p class="hint full" style="margin:0">填了之後 AI 教練建議運動時會避開對這些狀況不好的動作，例如膝蓋不好會少建議跑跳類運動。</p>
+      <label>168 斷食開始進食<input type="time" id="pFastStart"></label>
+      <label>168 斷食結束進食<input type="time" id="pFastEnd"></label>
+      <p class="hint full" style="margin:0">兩個都填才會啟用，例如中午12點到晚上8點就填 12:00 和 20:00。首頁會顯示目前在不在進食窗口內，AI 建議也會配合這個時間安排三餐。</p>
+      <label class="full">搭配高碳日／作弊餐
+        <select id="pCarbCycle">
+          <option value="">不特別安排</option>
+          <option value="7">大約每週一次</option>
+          <option value="14">大約每兩週一次</option>
+          <option value="auto">讓 AI 依狀況建議</option>
+        </select>
+      </label>
+      <p class="hint full" style="margin:0">做重訓/阻力訓練時，適度安排高碳日能幫助肝醣補充和表現，作弊餐則有助於長期執行飲控的心理調適。AI 教練建議會依你最近的飲食狀況提醒適合的時機。</p>
       <label class="full">自訂熱量目標<input type="number" id="pOverride" min="800" max="5000" placeholder="留空＝自動" inputmode="numeric"></label>
       <div class="calc" id="calcBox"></div>
       <button class="btn full" type="submit">儲存設定</button>
@@ -583,6 +596,27 @@ function renderBalance(){
   pArc.setAttribute('stroke-dasharray', `${(pFrac*C).toFixed(1)} ${C.toFixed(1)}`);
   $('#proteinRingLab').textContent = pLeft > 0 ? '蛋白質還差' : '蛋白質已達標';
   $('#proteinRingNum').textContent = pLeft > 0 ? fmt(pLeft) : fmt(protein);
+  renderFast();
+}
+
+function renderFast(){
+  const el = $('#fastNote');
+  if (cur !== today || !profile || !profile.fastStart || !profile.fastEnd) { el.hidden = true; return; }
+  const toMin = s => { const [h,m] = s.split(':').map(Number); return h*60+m; };
+  const now = new Date(), nowMin = now.getHours()*60 + now.getMinutes();
+  const startMin = toMin(profile.fastStart), endMin = toMin(profile.fastEnd);
+  const fmtMin = m => { const h = Math.floor(m/60), mm = m%60; return h > 0 ? `${h}小時${mm>0?mm+'分':''}` : `${mm}分`; };
+  el.hidden = false;
+  if (startMin <= endMin) {
+    if (nowMin < startMin) el.textContent = `斷食中，還有 ${fmtMin(startMin-nowMin)} 可以開始進食（進食窗口 ${profile.fastStart}–${profile.fastEnd}）。`;
+    else if (nowMin <= endMin) el.textContent = `進食窗口中，距離結束還有 ${fmtMin(endMin-nowMin)}（${profile.fastStart}–${profile.fastEnd}）。`;
+    else el.textContent = `今天的進食窗口已結束（${profile.fastStart}–${profile.fastEnd}），斷食中。`;
+  } else {
+    // window crosses midnight
+    const inWindow = nowMin >= startMin || nowMin <= endMin;
+    if (inWindow) { const remain = nowMin >= startMin ? (1440-nowMin+endMin) : (endMin-nowMin); el.textContent = `進食窗口中，距離結束還有 ${fmtMin(remain)}（${profile.fastStart}–${profile.fastEnd}）。`; }
+    else el.textContent = `斷食中，還有 ${fmtMin(startMin-nowMin)} 可以開始進食（進食窗口 ${profile.fastStart}–${profile.fastEnd}）。`;
+  }
 }
 
 function renderRace(){
@@ -842,12 +876,15 @@ function fillProfileForm(){
   $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pRankGoal').value = p.rankGoal ?? '';
   $('#pHealthNote').value = p.healthNote ?? '';
+  $('#pFastStart').value = p.fastStart ?? '';
+  $('#pFastEnd').value = p.fastEnd ?? '';
+  $('#pCarbCycle').value = p.carbCycle ?? '';
   $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, healthNote: $('#pHealthNote').value.trim() || null, override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, healthNote: $('#pHealthNote').value.trim() || null, fastStart: $('#pFastStart').value || null, fastEnd: $('#pFastEnd').value || null, carbCycle: $('#pCarbCycle').value || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -1068,6 +1105,9 @@ function buildCoachPrompt(){
   const healthLine = profile && profile.healthNote
     ? `使用者的健康狀況備註（醫生看診或健康檢查得到的長期狀況）：${profile.healthNote}。給飲食和運動建議時要把這些狀況都考慮進去，不要給可能加重這些狀況的建議：關節問題要避開跑跳、深蹲到底這類高衝擊或高負重動作，優先建議游泳、飛輪、橢圓機、快走；肝臟／代謝相關問題（例如脂肪肝）要特別注意減重速度不要太快（研究顯示減太快反而可能讓肝臟發炎惡化），飲食上少精緻糖和油炸物；血壓問題要注意鈉攝取不要太高。`
     : '';
+  const fastLine = profile && profile.fastStart && profile.fastEnd
+    ? `使用者執行 168 間歇性斷食，進食窗口是 ${profile.fastStart} 到 ${profile.fastEnd}，只有在這段時間吃東西。建議餐別時間要配合這個窗口（例如窗口中午才開始，使用者的「早餐」其實是當天第一餐，不要叫使用者一大早進食，也不要建議窗口以外的時間吃東西）。`
+    : '';
 
   // accumulated performance over the last 7 days, not just today
   const recent = [];
@@ -1076,6 +1116,18 @@ function buildCoachPrompt(){
   const weekLine = loggedDays.length
     ? `最近 7 天有記錄 ${loggedDays.length} 天，平均淨攝取（飲食－運動）約 ${fmt(loggedDays.reduce((a,r)=>a+r.inK-r.exK,0)/loggedDays.length)} kcal，其中熱量控制在目標內有 ${loggedDays.filter(r=>r.inK-r.exK<=t.kcal).length} 天。`
     : '最近 7 天還沒什麼飲食記錄，先用今天的狀況給建議就好。';
+
+  let carbLine = '';
+  if (profile && profile.carbCycle) {
+    const freqLabel = profile.carbCycle === '7' ? '大約每週一次' : profile.carbCycle === '14' ? '大約每兩週一次' : '依狀況安排（沒有固定頻率）';
+    if (loggedDays.length) {
+      const highest = loggedDays.reduce((a,b) => b.inK > a.inK ? b : a);
+      const daysSince = Math.round((parse(today) - parse(highest.ds)) / 86400000);
+      carbLine = `使用者希望搭配高碳日／作弊餐（頻率：${freqLabel}），這對重訓表現、肝醣補充和長期飲控的心理調適都有幫助。最近 7 天攝取最高的一天是 ${highest.ds}（約 ${fmt(highest.inK)} kcal），距今 ${daysSince} 天。如果已經有一段時間（大致對應使用者設定的頻率）都在熱量赤字、沒有明顯的高碳日，可以主動建議今天或最近安排一次高碳日或作弊餐，並說明份量抓法（例如當天熱量拉高到接近或略高於TDEE，碳水比例拉高，蛋白質還是要顧到，隔天恢復正常飲控即可，不用因為吃多就過度補償少吃）；如果最近才有過高碳日，就不用特別建議，按平常步調即可。`;
+    } else {
+      carbLine = `使用者希望搭配高碳日／作弊餐（頻率：${freqLabel}），但目前記錄還不夠多天，無法判斷上次高碳日是什麼時候，先不用主動建議。`;
+    }
+  }
 
   const ws = Object.values(days).filter(w => w.weight && w.date <= today).sort((a,b)=>a.date<b.date?-1:1);
   let paceLine = '體重記錄還不夠多天，看不出減重趨勢，先鼓勵使用者每天早上空腹量體重。';
@@ -1107,9 +1159,11 @@ function buildCoachPrompt(){
   return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽，每天早上空腹（早餐前）量體重，這個習慣很穩定，數據可信。
 使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
 ${healthLine}
+${fastLine}
 ${scoreLine}
 ${muscleLine}
 ${weekLine}
+${carbLine}
 ${paceLine}
 今天每日熱量目標 ${fmt(t.kcal)} kcal，目前已吃 ${fmt(inK)} kcal，運動消耗 ${fmt(exK)} kcal，${left >= 0 ? '還可以吃 ' + fmt(left) + ' kcal' : '已超過目標 ' + fmt(Math.abs(left)) + ' kcal'}。
 蛋白質目標約 ${fmt(pTarget)}g（體重 × 1.8g），今天已吃 ${fmt(protein)}g，${pLeft > 0 ? '還差 ' + fmt(pLeft) + 'g' : '已達標'}。使用者特別在意蛋白質攝取是否足夠搭配重訓，建議接下來的餐要優先把蛋白質缺口補足，不是只看熱量夠不夠。
@@ -1117,7 +1171,7 @@ ${paceLine}
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
 請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練和足夠蛋白質保護並盡量增加肌肉量（這對平手判定的肌肉增加率有幫助）。這場比賽主要是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
-{"summary":"一句話總評，結合今天狀況、蛋白質攝取和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡和蛋白質g，優先補足蛋白質缺口；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度、這幾天的累積速度，以及使用者的健康狀況備註（如果有）調整強度和動作選擇","note":"一句鼓勵或提醒"}`;
+{"summary":"一句話總評，結合今天狀況、蛋白質攝取和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡和蛋白質g，優先補足蛋白質缺口；如果使用者有設定 168 斷食窗口，餐點安排要配合那個時間；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西；如果判斷今天適合安排高碳日或作弊餐，在這裡具體說明怎麼吃","exercise":"今天建議的運動內容和時間，依距離比賽的進度、這幾天的累積速度，以及使用者的健康狀況備註（如果有）調整強度和動作選擇","note":"一句鼓勵或提醒，如果今天建議安排高碳日/作弊餐，也可以在這裡簡短說明原因"}`;
 }
 $('#coachGo').onclick = async () => {
   const btn = $('#coachGo'); btn.disabled = true; $('#coachResult').textContent = '';
