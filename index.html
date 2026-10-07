@@ -405,6 +405,8 @@ details[open] summary::after{content:"－"}
       <label>目標體脂率 (%)<input type="number" id="pGoalFat" min="5" max="60" step="0.1" placeholder="選填" inputmode="decimal"></label>
       <label class="full">比賽／目標日期<input type="date" id="pDeadline"></label>
       <label class="full">名次目標（選填）<input type="text" id="pRankGoal" placeholder="例如：前 10 名，共 430 人參賽" maxlength="60" autocomplete="off"></label>
+      <label class="full">健康狀況備註（選填）<input type="text" id="pHealthNote" placeholder="例如：膝蓋不好、血壓偏高病史、看過新陳代謝科" maxlength="120" autocomplete="off"></label>
+      <p class="hint full" style="margin:0">填了之後 AI 教練建議運動時會避開對這些狀況不好的動作，例如膝蓋不好會少建議跑跳類運動。</p>
       <label class="full">自訂熱量目標<input type="number" id="pOverride" min="800" max="5000" placeholder="留空＝自動" inputmode="numeric"></label>
       <div class="calc" id="calcBox"></div>
       <button class="btn full" type="submit">儲存設定</button>
@@ -821,12 +823,13 @@ function fillProfileForm(){
   $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
   $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pRankGoal').value = p.rankGoal ?? '';
+  $('#pHealthNote').value = p.healthNote ?? '';
   $('#pOverride').value = p.override ?? '';
   updateCalc();
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, healthNote: $('#pHealthNote').value.trim() || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -1044,6 +1047,9 @@ function buildCoachPrompt(){
   const goalLine = profile && (profile.goalWeight || profile.goalFat)
     ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}${profile.rankGoal ? '，名次目標：' + profile.rankGoal + '（起點體脂率偏高，想拚一下排名，可以用比較積極但安全的方式）' : ''}`
     : '使用者還沒設定比賽目標，先給一般減脂建議';
+  const healthLine = profile && profile.healthNote
+    ? `使用者的健康狀況備註：${profile.healthNote}。已經看過新陳代謝科，醫生要求飲控和減重（對膝蓋也有幫助）。建議運動時要避開會加重這些狀況的動作，例如膝蓋不好就少建議跑步、跳躍、深蹲到底這類高衝擊或高負重的動作，優先建議游泳、飛輪、橢圓機、快走這類對關節負擔小的有氧，重訓也要留意膝關節角度。`
+    : '';
 
   // accumulated performance over the last 7 days, not just today
   const recent = [];
@@ -1082,6 +1088,7 @@ function buildCoachPrompt(){
 
   return `你是專業的健身教練和營養師，熟悉台灣常見飲食。使用者正在準備一場減重／減體脂比賽，每天早上空腹（早餐前）量體重，這個習慣很穩定，數據可信。
 使用者資料：體重 ${curW} kg${curF != null ? '，體脂率 ' + curF + '%' : ''}。${goalLine}。
+${healthLine}
 ${scoreLine}
 ${muscleLine}
 ${weekLine}
@@ -1092,7 +1099,7 @@ ${paceLine}
 ${loggedMeals}
 喝水 ${d.water || 0} / ${t.water} ml。
 請用繁體中文給建議，語氣務實、簡短，根據這幾天累積的趨勢（不是只看今天）調整建議的積極程度。如果使用者設了名次目標，可以建議比較積極的運動量和熱量赤字，但絕對不要叫使用者吃低於每日目標熱量、不要建議挨餓或不健康的極端節食，優先用增加運動量來擴大熱量赤字、搭配重量訓練和足夠蛋白質保護並盡量增加肌肉量（這對平手判定的肌肉增加率有幫助）。這場比賽主要是比體脂率相對降幅，絕對不要建議賽前脫水、限水、三溫暖烤箱逼汗等操縱體脂機讀數的手法（這些不是真的減脂，對身體有風險），只專注在真實、可持續的體脂下降。只回覆 JSON，格式：
-{"summary":"一句話總評，結合今天狀況、蛋白質攝取和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡和蛋白質g，優先補足蛋白質缺口；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度和這幾天的累積速度調整強度","note":"一句鼓勵或提醒"}`;
+{"summary":"一句話總評，結合今天狀況、蛋白質攝取和這幾天的累積趨勢","meals":"針對還沒吃或接下來的餐，具體建議吃什麼、大概多少大卡和蛋白質g，優先補足蛋白質缺口；如果熱量已經超標，建議怎麼調整，不要叫使用者完全不吃東西","exercise":"今天建議的運動內容和時間，依距離比賽的進度、這幾天的累積速度，以及使用者的健康狀況備註（如果有）調整強度和動作選擇","note":"一句鼓勵或提醒"}`;
 }
 $('#coachGo').onclick = async () => {
   const btn = $('#coachGo'); btn.disabled = true; $('#coachResult').textContent = '';
