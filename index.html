@@ -304,6 +304,11 @@ details[open] summary::after{content:"－"}
       <button class="btn ghost" data-water="250" type="button">＋250 一杯</button>
       <button class="btn ghost" data-water="500" type="button">＋500 一瓶</button>
     </div>
+    <form class="addrow" id="waterCustomForm">
+      <input type="number" id="waterCustom" class="w90" placeholder="其他 ml" min="1" max="2000" inputmode="numeric">
+      <button class="btn ghost" type="submit">加入</button>
+    </form>
+    <p class="hint" style="margin:0">無糖黑咖啡、茶可以算進喝水量；有加奶、糖的飲料（拿鐵、可可）熱量和蛋白質不低，建議記在上面「飲食紀錄」，不要只算水量。</p>
   </section>
 
   <!-- Exercise -->
@@ -1113,6 +1118,14 @@ $('#prevDay').onclick = () => { cur = addDays(cur,-1); renderAll(); };
 $('#nextDay').onclick = () => { if (cur < today) { cur = addDays(cur,1); renderAll(); } };
 $('#foodForm').addEventListener('submit', e => { e.preventDefault(); addFood($('#foodName').value, $('#foodKcal').value, $('#foodProtein').value); $('#foodName').value=''; $('#foodKcal').value=''; $('#foodProtein').value=''; $('#foodName').focus(); });
 document.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { const d = getDay(cur); d.water = Math.max(0, (d.water||0) + +b.dataset.water); persistDay(); renderAll(); });
+$('#waterCustomForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = Math.round(+$('#waterCustom').value || 0);
+  if (!(v > 0)) return;
+  const d = getDay(cur); d.water = Math.max(0, (d.water||0) + v); persistDay();
+  $('#waterCustom').value = ''; renderAll();
+  toast(`已加入 ${v} ml`);
+});
 $('#exForm').addEventListener('submit', e => {
   e.preventDefault(); const [name, met] = EXS[+$('#exType').value]; const min = Math.round(+$('#exMin').value); if (!(min>0)) return;
   const kcal = Math.round(met * bodyWeight() * min / 60);
