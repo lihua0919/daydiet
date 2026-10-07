@@ -550,7 +550,7 @@ function calc(p){
   if (!p || !p.weight || !p.height || !p.age) return null;
   const bmr = 10*p.weight + 6.25*p.height - 5*p.age + (p.sex === 'm' ? 5 : -161);
   const tdee = bmr * Number(p.act || 1.2);
-  const floor = p.sex === 'm' ? 1500 : 1200;
+  const floor = Math.max(p.sex === 'm' ? 1500 : 1200, Math.round(bmr));
   let target = tdee + Number(p.goal || 0), floored = false;
   if (target < floor) { target = floor; floored = true; }
   if (p.override) target = Number(p.override);
@@ -591,7 +591,7 @@ function renderBalance(){
   const c = calc(profile);
   $('#targetNote').textContent = !c ? '目前用預設目標，設定個人資料後會自動計算。'
     : profile.override ? '使用你自訂的熱量目標。'
-    : c.floored ? `已調到最低建議攝取 ${fmt(c.floor)} kcal，吃太少反而容易掉肌肉。` : `依你的身體數據與目標自動計算。`;
+    : c.floored ? `已調到最低建議攝取 ${fmt(c.floor)} kcal（不低於你的基礎代謝率 ${fmt(c.bmr)} kcal），吃太少反而容易掉肌肉。` : `依你的身體數據與目標自動計算。`;
   const pTarget = proteinTarget(), pLeft = pTarget - protein;
   $('#eqProtein').childNodes[0].textContent = fmt(protein);
   $('#eqProteinTarget').textContent = fmt(pTarget);
