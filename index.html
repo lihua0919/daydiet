@@ -315,6 +315,10 @@ details[open] summary::after{content:"－"}
       <label>體脂率<span class="unit-in"><input type="number" id="fatInput" step="0.1" min="3" max="70" placeholder="38" inputmode="decimal"><em>%</em></span></label>
       <label>腰圍<span class="unit-in"><input type="number" id="waistInput" step="0.1" min="40" max="200" placeholder="83.9" inputmode="decimal"><em>cm</em></span></label>
       <label>空腹血糖<span class="unit-in"><input type="number" id="gluInput" step="1" min="30" max="600" placeholder="100" inputmode="numeric"><em>mg/dL</em></span></label>
+      <label style="grid-column:1/-1;flex-direction:row;align-items:center;gap:6px">
+        <input type="checkbox" id="fatIsHome" style="width:18px;height:18px;accent-color:var(--accent);flex:0 0 auto">
+        <span>體脂率填的是家用體脂計讀數（自動校正）</span>
+      </label>
       <button class="btn" type="submit">記錄</button>
     </form>
     <div class="addrow">
@@ -350,6 +354,8 @@ details[open] summary::after{content:"－"}
       <label>體重 (kg)<input type="number" id="pWeight" min="30" max="250" step="0.1" placeholder="55" inputmode="decimal"></label>
       <label>比賽期初體脂率 (%)<input type="number" id="pFat" min="3" max="70" step="0.1" placeholder="38" inputmode="decimal"></label>
       <label>期初骨骼肌肉重 (kg)<input type="number" id="pMuscle" min="10" max="120" step="0.1" placeholder="24.2" inputmode="decimal"></label>
+      <label>家用體脂計校正差 (%)<input type="number" id="pHomeOffset" step="0.1" placeholder="例：4.5" inputmode="decimal"></label>
+      <p class="hint full" style="margin:0">家用體脂計通常跟比賽用的 InBody 讀數不一樣。校正差＝家用體脂計讀數－InBody讀數，最準的方式是找一天兩台都量，算出差值填這裡；之後在「身體數據」用家用體脂計量測時，勾選「這是家用體脂計讀數」，系統會自動扣掉校正差換算。</p>
       <p class="hint full" style="margin:0">這兩個設定一次就好，之後身體數據變化請到下面「身體數據」區塊記錄，不要回來改這裡，不然比賽的相對降幅／肌肉增加率會算錯。</p>
       <label class="full">平常活動量
         <select id="pAct">
@@ -766,6 +772,7 @@ function fillProfileForm(){
   $('#pSex').value = p.sex || 'f'; $('#pAge').value = p.age ?? ''; $('#pHeight').value = p.height ?? ''; $('#pWeight').value = p.weight ?? '';
   $('#pFat').value = p.fat ?? '';
   $('#pMuscle').value = p.muscle ?? '';
+  $('#pHomeOffset').value = p.homeOffset ?? '';
   $('#pAct').value = p.act || '1.375'; $('#pGoal').value = String(p.goal ?? -500); $('#pGoalW').value = p.goalWeight ?? ''; $('#pGoalFat').value = p.goalFat ?? '';
   $('#pDeadline').value = p.deadline || '2026-11-20';
   $('#pRankGoal').value = p.rankGoal ?? '';
@@ -774,7 +781,7 @@ function fillProfileForm(){
 }
 function readProfileForm(){
   const n = id => { const v = $(id).value; return v === '' ? null : +v; };
-  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
+  return { sex: $('#pSex').value, age: n('#pAge'), height: n('#pHeight'), weight: n('#pWeight'), fat: n('#pFat'), muscle: n('#pMuscle'), homeOffset: n('#pHomeOffset'), act: $('#pAct').value, goal: +$('#pGoal').value, goalWeight: n('#pGoalW'), goalFat: n('#pGoalFat'), deadline: $('#pDeadline').value || '2026-11-20', rankGoal: $('#pRankGoal').value.trim() || null, override: n('#pOverride') };
 }
 function updateCalc(){
   const c = calc(readProfileForm()), box = $('#calcBox');
@@ -1076,10 +1083,26 @@ $('#exForm').addEventListener('submit', e => {
 $('#wForm').addEventListener('submit', e => {
   e.preventDefault(); const d = getDay(cur);
   const num = (sel, dec) => { const v = $(sel).value; return v === '' ? null : Math.round(+v * 10**dec) / 10**dec; };
-  d.weight = num('#wInput',1); d.fat = num('#fatInput',1); d.glucose = num('#gluInput',0); d.muscle = num('#muscleInput',1); d.waist = num('#waistInput',1); persistDay();
+  const isHome = $('#fatIsHome').checked;
+  const rawFat = num('#fatInput',1);
+  let fatNote = '';
+  if (isHome && rawFat != null) {
+    if (profile && profile.homeOffset != null) {
+      d.fat = Math.round((rawFat - profile.homeOffset) * 10) / 10;
+      fatNote = `體脂 ${d.fat}%（家用體脂計 ${rawFat}% － 校正差 ${profile.homeOffset} 換算）`;
+    } else {
+      d.fat = rawFat;
+      fatNote = `體脂 ${d.fat}%（還沒設定校正差，先用家用體脂計原始數字）`;
+    }
+  } else {
+    d.fat = rawFat;
+    fatNote = d.fat ? `體脂 ${d.fat}%` : '';
+  }
+  d.weight = num('#wInput',1); d.glucose = num('#gluInput',0); d.muscle = num('#muscleInput',1); d.waist = num('#waistInput',1); persistDay();
   if (d.weight && cur === today && profile) { profile.weight = d.weight; store.saveProfile(profile); fillProfileForm(); }
+  $('#fatIsHome').checked = false;
   document.activeElement && document.activeElement.blur(); renderAll();
-  const parts = [d.weight && `${d.weight} kg`, d.fat && `體脂 ${d.fat}%`, d.muscle && `肌肉 ${d.muscle}kg`, d.waist && `腰圍 ${d.waist}cm`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
+  const parts = [d.weight && `${d.weight} kg`, fatNote, d.muscle && `肌肉 ${d.muscle}kg`, d.waist && `腰圍 ${d.waist}cm`, d.glucose && `血糖 ${d.glucose}`].filter(Boolean);
   toast(parts.length ? '已記錄 ' + parts.join('、') : '已清除今天的身體數據');
 });
 $('#wClear').onclick = () => {
