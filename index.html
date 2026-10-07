@@ -309,6 +309,14 @@ details[open] summary::after{content:"－"}
   <!-- Body metrics -->
   <section class="card" aria-labelledby="wH">
     <h2 id="wH"><span class="dot" style="background:var(--accent)"></span>身體數據<span class="small muted" style="font-weight:400">早上空腹量</span></h2>
+    <div class="photo" style="margin-bottom:2px">
+      <label class="photo-btn" for="bodyPhotoInput" style="background:var(--accent);color:var(--accent-ink);height:48px;font-size:15px">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span>拍照讀取體脂機數據</span>
+      </label>
+      <input type="file" id="bodyPhotoInput" accept="image/*" hidden>
+      <div class="photo-status small muted" id="bodyPhotoStatus" role="status" aria-live="polite"></div>
+    </div>
     <form class="body-form" id="wForm">
       <label>體重<span class="unit-in"><input type="number" id="wInput" step="0.1" min="20" max="300" placeholder="65.9" inputmode="decimal"><em>kg</em></span></label>
       <label>骨骼肌肉重<span class="unit-in"><input type="number" id="muscleInput" step="0.1" min="10" max="120" placeholder="24.2" inputmode="decimal"><em>kg</em></span></label>
@@ -1112,6 +1120,33 @@ $('#wClear').onclick = () => {
   persistDay(); document.activeElement && document.activeElement.blur(); renderAll();
   toast('已清除這天的身體數據');
 };
+$('#bodyPhotoInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const st = $('#bodyPhotoStatus');
+  if (!AI.key()) { st.textContent = PHOTO_ERR.no_key; $('#photoWarn').hidden = false; e.target.value = ''; return; }
+  st.textContent = '正在讀取照片上的數字，大約需要 5–20 秒…';
+  const ctl = new AbortController();
+  const prompt = `這是一張體脂計／體組成分析 App 的畫面截圖。請讀出畫面上清楚顯示的數值，看不到或看不清楚的欄位留 null，不要用猜的或換算的。只回覆 JSON：
+{"weightKg": 數字或null, "fatPercent": 數字或null, "muscleKg": 數字或null（只有畫面上明確標示公斤/kg 的「骨骼肌肉重」或「肌肉重」才填這裡，不要把骨重或其他重量填進來）, "muscleRatePercent": 數字或null（如果畫面上是「肌肉率」這種百分比數值，填這裡，不要跟 muscleKg 搞混，兩者是不同東西）, "waistCm": 數字或null, "note": "一句話說明辨識到哪些欄位，或有沒有不確定的地方"}`;
+  try {
+    const res = await askAI(prompt, f, ctl.signal);
+    if (res.weightKg) $('#wInput').value = res.weightKg;
+    if (res.fatPercent) { $('#fatInput').value = res.fatPercent; $('#fatIsHome').checked = true; }
+    if (res.muscleKg) $('#muscleInput').value = res.muscleKg;
+    if (res.waistCm) $('#waistInput').value = res.waistCm;
+    const parts = [];
+    if (res.weightKg) parts.push('體重 ' + res.weightKg + 'kg');
+    if (res.fatPercent) parts.push('體脂率 ' + res.fatPercent + '%（記錄時會自動校正）');
+    if (res.muscleKg) parts.push('骨骼肌肉重 ' + res.muscleKg + 'kg');
+    if (res.muscleRatePercent) parts.push('肌肉率 ' + res.muscleRatePercent + '%（跟 InBody 的骨骼肌肉重定義不同，沒有自動填入，僅供參考）');
+    if (res.waistCm) parts.push('腰圍 ' + res.waistCm + 'cm');
+    st.textContent = parts.length ? '已讀取：' + parts.join('、') + '。確認數字沒問題後按下面「記錄」。' : (res.note ? res.note : '沒有讀到清楚的數字，請手動輸入。');
+  } catch (err) {
+    const code = err && err.code;
+    if (code === 'no_key' || code === 'bad_key') $('#photoWarn').hidden = false;
+    st.textContent = PHOTO_ERR[code] || '讀取失敗，請再試一次，或手動輸入。';
+  } finally { e.target.value = ''; }
+});
 $('#pForm').addEventListener('input', updateCalc);
 $('#pForm').addEventListener('submit', e => {
   e.preventDefault(); profile = readProfileForm(); store.saveProfile(profile); renderAll(); $('#settings').open = false;
