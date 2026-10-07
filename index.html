@@ -405,7 +405,7 @@ details[open] summary::after{content:"－"}
       <label>目標體脂率 (%)<input type="number" id="pGoalFat" min="5" max="60" step="0.1" placeholder="選填" inputmode="decimal"></label>
       <label class="full">比賽／目標日期<input type="date" id="pDeadline"></label>
       <label class="full">名次目標（選填）<input type="text" id="pRankGoal" placeholder="例如：前 10 名，共 430 人參賽" maxlength="60" autocomplete="off"></label>
-      <label class="full">健康狀況備註（選填）<input type="text" id="pHealthNote" placeholder="例如：膝蓋不好、血壓偏高病史、看過新陳代謝科" maxlength="120" autocomplete="off"></label>
+      <label class="full">健康狀況備註（選填）<input type="text" id="pHealthNote" placeholder="例如：膝蓋不好、血壓偏高病史、中度脂肪肝、看過新陳代謝科" maxlength="200" autocomplete="off"></label>
       <p class="hint full" style="margin:0">填了之後 AI 教練建議運動時會避開對這些狀況不好的動作，例如膝蓋不好會少建議跑跳類運動。</p>
       <label class="full">自訂熱量目標<input type="number" id="pOverride" min="800" max="5000" placeholder="留空＝自動" inputmode="numeric"></label>
       <div class="calc" id="calcBox"></div>
@@ -1048,7 +1048,7 @@ function buildCoachPrompt(){
     ? `目標體重 ${profile.goalWeight ?? '未設定'} kg${profile.goalFat ? '，目標體脂率 ' + profile.goalFat + '%' : ''}${daysLeft != null ? '，距離比賽目標日還有 ' + daysLeft + ' 天' : ''}${profile.rankGoal ? '，名次目標：' + profile.rankGoal + '（起點體脂率偏高，想拚一下排名，可以用比較積極但安全的方式）' : ''}`
     : '使用者還沒設定比賽目標，先給一般減脂建議';
   const healthLine = profile && profile.healthNote
-    ? `使用者的健康狀況備註：${profile.healthNote}。已經看過新陳代謝科，醫生要求飲控和減重（對膝蓋也有幫助）。建議運動時要避開會加重這些狀況的動作，例如膝蓋不好就少建議跑步、跳躍、深蹲到底這類高衝擊或高負重的動作，優先建議游泳、飛輪、橢圓機、快走這類對關節負擔小的有氧，重訓也要留意膝關節角度。`
+    ? `使用者的健康狀況備註（醫生看診或健康檢查得到的長期狀況）：${profile.healthNote}。給飲食和運動建議時要把這些狀況都考慮進去，不要給可能加重這些狀況的建議：關節問題要避開跑跳、深蹲到底這類高衝擊或高負重動作，優先建議游泳、飛輪、橢圓機、快走；肝臟／代謝相關問題（例如脂肪肝）要特別注意減重速度不要太快（研究顯示減太快反而可能讓肝臟發炎惡化），飲食上少精緻糖和油炸物；血壓問題要注意鈉攝取不要太高。`
     : '';
 
   // accumulated performance over the last 7 days, not just today
